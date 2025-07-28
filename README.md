@@ -209,3 +209,13 @@ Configration specific to Android can be made in `strings.xml`:
 </resources>
 
 ```
+
+
+<docgen-index>
+
+* [`addWatcher(...)`](#addwatcher)
+* [`removeWatcher(...)`](#removewatcher)
+* [`openSettings()`](#opensettings)
+* [Interfaces](#interfaces)
+
+</docgen-index>

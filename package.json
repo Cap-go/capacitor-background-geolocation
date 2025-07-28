@@ -2,39 +2,79 @@
     "name": "@capgo/background-geolocation",
     "version": "7.0.0",
     "description": "Receive geolocation updates even while the app is in the background.",
-    "repository": {
-        "type": "git",
-        "url": "https://github.com/Cap-go/background-geolocation"
-    },
+    "main": "dist/plugin.cjs.js",
+    "module": "dist/esm/index.js",
+    "types": "dist/esm/index.d.ts",
+    "unpkg": "dist/plugin.js",
+    "files": [
+      "android/src/main/",
+      "android/build.gradle",
+      "dist/",
+      "ios/Plugin/",
+      "Package.swift",
+      "CapgoBackgroundGeolocation.podspec"
+    ],
+    "author": "Martin Donadieu <martin@capgo.app>",
     "license": "MIT",
-    "author": "Cap-go",
-    "types": "definitions.d.ts",
+    "repository": {
+      "type": "git",
+      "url": "git+https://github.com/Cap-go/capacitor-inappbrowser.git"
+    },
+    "bugs": {
+      "url": "https://github.com/Cap-go/capacitor-inappbrowser/issues"
+    },
+    "scripts": {
+        "verify": "npm run verify:ios && npm run verify:android && npm run verify:web",
+        "verify:ios": "cd ios && pod install && xcodebuild -workspace Plugin.xcworkspace -sdk iphoneos -scheme Plugin && cd ..",
+        "verify:iosSPM": "xcodebuild -workspace ios/Plugin.xcworkspace -scheme Plugin -destination generic/platform=iOS",
+        "verify:android": "cd android && ./gradlew clean build test && cd ..",
+        "verify:web": "npm run build",
+        "lint": "npm run eslint && npm run prettier -- --check && npm run swiftlint -- lint",
+        "fmt": "npm run eslint -- --fix && npm run prettier -- --write && npm run swiftlint -- --autocorrect --format",
+        "eslint": "eslint .",
+        "prettier": "prettier --config .prettierrc.js \"**/*.{css,html,ts,js,java}\"",
+        "swiftlint": "node-swiftlint",
+        "docgen": "docgen --api BackgroundGeolocationPlugin --output-readme README.md --output-json dist/docs.json",
+        "build": "npm run clean && npm run docgen && tsc && rollup -c rollup.config.mjs",
+        "clean": "rimraf ./dist",
+        "watch": "tsc --watch",
+        "prepublishOnly": "npm run build"
+    },
     "keywords": [
         "capacitor",
         "plugin",
-        "native"
-    ],
-    "files": [
-        "android/build.gradle",
-        "android/settings.gradle",
-        "android/proguard-rules.pro",
-        "android/gradle/wrapper/gradle-wrapper.properties",
-        "android/gradle.properties",
-        "ios/Plugin/Plugin.*",
-        "android/src/main/",
-        "ios/Podfile*",
-        "ios/Plugin/Info.plist",
-        "CapgoBackgroundGeolocation.podspec",
-        "definitions.d.ts"
+        "native",
+        "background",
+        "geolocation"
     ],
     "devDependencies": {
-        "@capacitor/android": "7.0.0",
-        "@capacitor/core": "7.0.0",
-        "@capacitor/ios": "7.0.0"
+        "@capacitor/android": "^7.0.0",
+        "@capacitor/cli": "^7.0.0",
+        "@capacitor/core": "^7.0.0",
+        "@capacitor/docgen": "^0.3.0",
+        "@capacitor/ios": "^7.0.0",
+        "@ionic/eslint-config": "^0.4.0",
+        "@ionic/prettier-config": "^4.0.0",
+        "@ionic/swiftlint-config": "^2.0.0",
+        "@types/node": "^22.13.1",
+        "eslint": "^8.57.0",
+        "eslint-plugin-import": "^2.31.0",
+        "husky": "^9.1.7",
+        "prettier": "^3.4.2",
+        "prettier-plugin-java": "^2.6.7",
+        "rimraf": "^6.0.1",
+        "rollup": "^4.34.6",
+        "swiftlint": "^2.0.0",
+        "typescript": "^5.7.3"
     },
     "peerDependencies": {
         "@capacitor/core": ">=7.0.0"
     },
+    "eslintConfig": {
+    "extends": "@ionic/eslint-config/recommended"
+    },
+    "prettier": "@ionic/prettier-config",
+    "swiftlint": "@ionic/swiftlint-config",
     "capacitor": {
         "ios": {
             "src": "ios"
