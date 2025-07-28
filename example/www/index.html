@@ -1,38 +1,41 @@
-<!DOCTYPE html>
+<!doctype html>
 <html>
-<head>
-  <title>BackgroundGeolocation Example</title>
-  <meta name="viewport" content="viewport-fit=cover, width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <style>
-    body {
-      margin-top: 2em;
-    }
-    ul {
-      padding: 0;
-      margin: 0;
-      list-style-type: none;
-    }
-  </style>
-</head>
-<body>
-  <ul id="watchers"></ul>
+  <head>
+    <title>BackgroundGeolocation Example</title>
+    <meta
+      name="viewport"
+      content="viewport-fit=cover, width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <style>
+      body {
+        margin-top: 2em;
+      }
+      ul {
+        padding: 0;
+        margin: 0;
+        list-style-type: none;
+      }
+    </style>
+  </head>
+  <body>
+    <ul id="watchers"></ul>
 
-  <button onclick="add_watcher(false)">+FG</button>
-  <button onclick="add_watcher(true)">+BG</button>
-  <br>Notification permissions: <button onclick="request_permissions()">Request</button>
-  <br>Guess:
-  <button onclick="guess(50)">50ms</button>
-  <button onclick="guess(100)">100ms</button>
-  <button onclick="guess(250)">250ms</button>
-  <button onclick="guess(1000)">1000ms</button>
+    <button onclick="add_watcher(false)">+FG</button>
+    <button onclick="add_watcher(true)">+BG</button>
+    <br />Notification permissions:
+    <button onclick="request_permissions()">Request</button> <br />Guess:
+    <button onclick="guess(50)">50ms</button>
+    <button onclick="guess(100)">100ms</button>
+    <button onclick="guess(250)">250ms</button>
+    <button onclick="guess(1000)">1000ms</button>
 
-  <ul id="log">
-    <li>Init</li>
-  </ul>
+    <ul id="log">
+      <li>Init</li>
+    </ul>
 
-  <script src="capacitor.js"></script>
-  <script src="plugin.js"></script> <!-- local-notifications -->
-  <script src="main.js"></script>
-</body>
+    <script src="capacitor.js"></script>
+    <script src="plugin.js"></script>
+    <!-- local-notifications -->
+    <script src="main.js"></script>
+  </body>
 </html>
-

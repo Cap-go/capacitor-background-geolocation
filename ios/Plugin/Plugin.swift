@@ -7,13 +7,13 @@ import CoreLocation
 let null = Optional<Double>.none as Any
 
 func formatLocation(_ location: CLLocation) -> PluginCallResultData {
-    var simulated = false;
+    var simulated = false
     if #available(iOS 15, *) {
         // Prior to iOS 15, it was not possible to detect simulated locations.
         // But in general, it is very difficult to simulate locations on iOS in
         // production.
         if location.sourceInformation != nil {
-            simulated = location.sourceInformation!.isSimulatedBySoftware;
+            simulated = location.sourceInformation!.isSimulatedBySoftware
         }
     }
     return [
@@ -29,7 +29,7 @@ func formatLocation(_ location: CLLocation) -> PluginCallResultData {
             value: Int(
                 location.timestamp.timeIntervalSince1970 * 1000
             )
-        ),
+        )
     ]
 }
 
@@ -60,16 +60,16 @@ class Watcher {
     func isLocationValid(_ location: CLLocation) -> Bool {
         return (
             allowStale ||
-            location.timestamp >= created
+                location.timestamp >= created
         )
     }
 }
 
 @objc(BackgroundGeolocation)
-public class BackgroundGeolocation : CAPPlugin, CLLocationManagerDelegate {
+public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
     private var watchers = [Watcher]()
 
-    @objc public override func load() {
+    @objc override public func load() {
         UIDevice.current.isBatteryMonitoringEnabled = true
     }
 
@@ -91,8 +91,8 @@ public class BackgroundGeolocation : CAPPlugin, CLLocationManagerDelegate {
             ].contains(UIDevice.current.batteryState)
             manager.desiredAccuracy = (
                 externalPower
-                ? kCLLocationAccuracyBestForNavigation
-                : kCLLocationAccuracyBest
+                    ? kCLLocationAccuracyBestForNavigation
+                    : kCLLocationAccuracyBest
             )
             var distanceFilter = call.getDouble("distanceFilter")
             // It appears that setting manager.distanceFilter to 0 can prevent
@@ -110,17 +110,15 @@ public class BackgroundGeolocation : CAPPlugin, CLLocationManagerDelegate {
                 if [
                     .notDetermined,
                     .denied,
-                    .restricted,
+                    .restricted
                 ].contains(status) {
                     return (
                         background
-                        ? manager.requestAlwaysAuthorization()
-                        : manager.requestWhenInUseAuthorization()
+                            ? manager.requestAlwaysAuthorization()
+                            : manager.requestWhenInUseAuthorization()
                     )
                 }
-                if (
-                    background && status == .authorizedWhenInUse
-                ) {
+                if background && status == .authorizedWhenInUse {
                     // Attempt to escalate.
                     manager.requestAlwaysAuthorization()
                 }
@@ -159,7 +157,7 @@ public class BackgroundGeolocation : CAPPlugin, CLLocationManagerDelegate {
             if UIApplication.shared.canOpenURL(settingsUrl) {
                 UIApplication.shared.open(settingsUrl, completionHandler: {
                     (success) in
-                    if (success) {
+                    if success {
                         return call.resolve()
                     } else {
                         return call.reject("Failed to open settings")
@@ -184,7 +182,7 @@ public class BackgroundGeolocation : CAPPlugin, CLLocationManagerDelegate {
                         // This error is sometimes sent by the manager if
                         // it cannot get a fix immediately.
                         return
-                    } else if (clErr.code == .denied) {
+                    } else if clErr.code == .denied {
                         watcher.stop()
                         return call.reject(
                             "Permission denied.",
@@ -230,4 +228,3 @@ public class BackgroundGeolocation : CAPPlugin, CLLocationManagerDelegate {
         }
     }
 }
-

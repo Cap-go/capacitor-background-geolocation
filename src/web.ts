@@ -7,18 +7,31 @@ import type {
   CallbackError,
 } from "./definitions";
 
-export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeolocationPlugin {
-  private watchers = new Map<string, { watchId: number; callback: (position?: Location, error?: CallbackError) => void }>();
+export class BackgroundGeolocationWeb
+  extends WebPlugin
+  implements BackgroundGeolocationPlugin
+{
+  private watchers = new Map<
+    string,
+    {
+      watchId: number;
+      callback: (position?: Location, error?: CallbackError) => void;
+    }
+  >();
   private watcherCounter = 0;
 
   async addWatcher(
     options: WatcherOptions,
-    callback: (position?: Location, error?: CallbackError) => void
+    callback: (position?: Location, error?: CallbackError) => void,
   ): Promise<string> {
     const watcherId = `watcher_${++this.watcherCounter}`;
-    
+
     if (!navigator.geolocation) {
-      callback(undefined, { name: 'GeolocationError', message: 'Geolocation is not supported by this browser', code: 'NOT_SUPPORTED' });
+      callback(undefined, {
+        name: "GeolocationError",
+        message: "Geolocation is not supported by this browser",
+        code: "NOT_SUPPORTED",
+      });
       return watcherId;
     }
 
@@ -39,7 +52,7 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
       },
       (error) => {
         const callbackError: CallbackError = {
-          name: 'GeolocationError',
+          name: "GeolocationError",
           message: error.message,
           code: error.code.toString(),
         };
@@ -49,7 +62,7 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
         enableHighAccuracy: true,
         timeout: 10000,
         maximumAge: options.stale ? 300000 : 0,
-      }
+      },
     );
 
     this.watchers.set(watcherId, { watchId, callback });
@@ -65,7 +78,7 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
   }
 
   async openSettings(): Promise<void> {
-    console.log('openSettings: Web implementation cannot open native settings');
-    window.alert('Please enable location permissions in your browser settings');
+    console.log("openSettings: Web implementation cannot open native settings");
+    window.alert("Please enable location permissions in your browser settings");
   }
 }
