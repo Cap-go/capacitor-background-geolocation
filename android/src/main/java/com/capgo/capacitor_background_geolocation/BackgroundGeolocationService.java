@@ -1,4 +1,4 @@
-package com.equimaps.capacitor_background_geolocation;
+package com.capgo.capacitor_background_geolocation;
 
 import android.app.Notification;
 import android.app.Service;

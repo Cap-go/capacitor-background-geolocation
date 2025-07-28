@@ -16,7 +16,7 @@ buildscript {
 apply plugin: 'com.android.library'
 
 android {
-    namespace "com.equimaps.capacitor_background_geolocation"
+    namespace "com.capgo.capacitor_background_geolocation"
     compileSdkVersion project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 33
     defaultConfig {
         minSdkVersion project.hasProperty('minSdkVersion') ? rootProject.ext.minSdkVersion : 22

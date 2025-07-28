@@ -1,14 +1,19 @@
 {
-    "name": "@capacitor-community/background-geolocation",
-    "version": "1.2.24",
+    "name": "@capgo/background-geolocation",
+    "version": "7.0.0",
     "description": "Receive geolocation updates even while the app is in the background.",
     "repository": {
         "type": "git",
-        "url": "https://github.com/capacitor-community/background-geolocation"
+        "url": "https://github.com/Cap-go/background-geolocation"
     },
     "license": "MIT",
-    "author": "James Diacono",
+    "author": "Cap-go",
     "types": "definitions.d.ts",
+    "keywords": [
+        "capacitor",
+        "plugin",
+        "native"
+    ],
     "files": [
         "android/build.gradle",
         "android/settings.gradle",
@@ -19,16 +24,16 @@
         "android/src/main/",
         "ios/Podfile*",
         "ios/Plugin/Info.plist",
-        "CapacitorCommunityBackgroundGeolocation.podspec",
+        "CapgoBackgroundGeolocation.podspec",
         "definitions.d.ts"
     ],
     "devDependencies": {
-        "@capacitor/android": "6.0.0-rc.0",
-        "@capacitor/core": "6.0.0-rc.0",
-        "@capacitor/ios": "6.0.0-rc.0"
+        "@capacitor/android": "7.0.0",
+        "@capacitor/core": "7.0.0",
+        "@capacitor/ios": "7.0.0"
     },
     "peerDependencies": {
-        "@capacitor/core": ">=3.0.0"
+        "@capacitor/core": ">=7.0.0"
     },
     "capacitor": {
         "ios": {

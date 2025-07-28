@@ -12,7 +12,7 @@
         <activity
             android:exported="true"
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode"
-            android:name="com.equimaps.capacitor_background_geolocation_example.MainActivity"
+            android:name="com.capgo.capacitor_background_geolocation_example.MainActivity"
             android:label="@string/title_activity_main"
             android:theme="@style/AppTheme.NoActionBarLaunch"
             android:launchMode="singleTask">

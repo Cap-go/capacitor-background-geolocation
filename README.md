@@ -1,11 +1,17 @@
 # Background Geolocation
+ <a href="https://capgo.app/"><img src='https://raw.githubusercontent.com/Cap-go/capgo/main/assets/capgo_banner.png' alt='Capgo - Instant updates for capacitor'/></a>
+
+<div align="center">
+  <h2><a href="https://capgo.app/?ref=plugin"> ➡️ Get Instant updates for your App with Capgo</a></h2>
+  <h2><a href="https://capgo.app/consulting/?ref=plugin"> Missing a feature? We’ll build the plugin for you 💪</a></h2>
+</div>
+
 A Capacitor plugin that lets you receive geolocation updates even while the app is backgrounded. Only iOS and Android platforms are supported.
 
 ## Usage
 
 ```javascript
-import {registerPlugin} from "@capacitor/core";
-const BackgroundGeolocation = registerPlugin("BackgroundGeolocation");
+import { BackgroundGeolocation } from "@capacitor-community/background-geolocation";
 
 // To start listening for changes in the device's location, add a new watcher.
 // You do this by calling 'addWatcher' with an options object and a callback. A
@@ -109,7 +115,7 @@ function guess_location(callback, timeout) {
     ).then(function (id) {
         setTimeout(function () {
             callback(last_location);
-            Plugins.BackgroundGeolocation.removeWatcher({id});
+            BackgroundGeolocation.removeWatcher({id});
         }, timeout);
     });
 }
@@ -118,24 +124,16 @@ function guess_location(callback, timeout) {
 ### Typescript support
 
 ```typescript
-import {BackgroundGeolocationPlugin} from "@capacitor-community/background-geolocation";
-const BackgroundGeolocation = registerPlugin<BackgroundGeolocationPlugin>("BackgroundGeolocation");
+import { BackgroundGeolocation } from "@capacitor-community/background-geolocation";
 ```
 
 ## Installation
 
-Different versions of the plugin support different versions of Capacitor:
+This plugin supports Capacitor v7:
 
 | Capacitor  | Plugin |
 |------------|--------|
-| v2         | v0.3   |
-| v3         | v1     |
-| v4         | v1     |
-| v5         | v1     |
-| v6         | v1     |
 | v7         | v1     |
-
-Read the documentation for v0.3 [here](https://github.com/capacitor-community/background-geolocation/tree/0.3.x).
 
 ```sh
 npm install @capacitor-community/background-geolocation
@@ -211,53 +209,3 @@ Configration specific to Android can be made in `strings.xml`:
 </resources>
 
 ```
-
-## Changelog
-
-### v1.2.24
-- Avoid crash introduced in v1.2.23.
-
-### v1.2.23
-- Perhaps make location updates more persistent on Android, see #137.
-
-### v1.2.22
-- Avoid interfering with safe area insets on Android
-
-### v1.2.21
-- Customize the notification color on Android.
-
-### v1.2.19
-- Fix a bug preventing the foreground service starting on Android.
-
-### v1.2.18
-- Always show the notification when a background watcher exists, improving the reliability of location updates on Android.
-
-### v1.2.17
-- Adds support for Capacitor v6.
-
-### v1.2.16
-- Fixes background location updates for Android 14.
-
-### v1.2.14
-- Adds support for Capacitor v5.
-
-### v1.2.3
-- Adds support for Capacitor v4.
-
-### v1.2.2
-- Prevents location updates from halting on iOS due to extended inactivity.
-
-### v1.2.1
-- Fixes background location updates for some devices running Android 12.
-
-### v1.2.0
-- On iOS, the status bar now turns blue whilst the location is being watched in the background. This provides the user a straightforward way to return to the app.
-
-### v1.0.4
-- Adds the `ACCESS_COARSE_LOCATION` permission. This is required for apps that target Android 12 (API level 31). A preceeding example shows how to add this permission to your app's manifest.
-
-### v1.0.0
-- BREAKING: `addWatcher` now returns a Promise that resolves to the callback ID, rather than the callback ID itself.
-- BREAKING: The plugin is imported via Capacitor's `registerPlugin` function, rather than from the `Plugins` object.
-- BREAKING: Drops support for iOS v11 and Capacitor v2.
-- Adds support for Capacitor v3.
