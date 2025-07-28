@@ -6,11 +6,11 @@
         "prepare": "cp node_modules/@capacitor/core/dist/capacitor.js* node_modules/@capacitor/local-notifications/dist/plugin.js* www/"
     },
     "dependencies": {
-        "@capacitor-community/background-geolocation": "../",
-        "@capacitor/android": "6.0.0-rc.0",
-        "@capacitor/cli": "6.0.0-rc.0",
-        "@capacitor/core": "6.0.0-rc.0",
-        "@capacitor/ios": "6.0.0-rc.0",
-        "@capacitor/local-notifications": "6.0.0-rc.0"
+        "@capgo/background-geolocation": "../",
+        "@capacitor/android": "7.0.0",
+        "@capacitor/cli": "7.0.0",
+        "@capacitor/core": "7.0.0",
+        "@capacitor/ios": "7.0.0",
+        "@capacitor/local-notifications": "7.0.0"
     }
 }

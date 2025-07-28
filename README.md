@@ -11,7 +11,7 @@ A Capacitor plugin that lets you receive geolocation updates even while the app 
 ## Usage
 
 ```javascript
-import { BackgroundGeolocation } from "@capacitor-community/background-geolocation";
+import { BackgroundGeolocation } from "@capgo/background-geolocation";
 
 // To start listening for changes in the device's location, add a new watcher.
 // You do this by calling 'addWatcher' with an options object and a callback. A
@@ -124,7 +124,7 @@ function guess_location(callback, timeout) {
 ### Typescript support
 
 ```typescript
-import { BackgroundGeolocation } from "@capacitor-community/background-geolocation";
+import { BackgroundGeolocation } from "@capgo/background-geolocation";
 ```
 
 ## Installation
@@ -136,7 +136,7 @@ This plugin supports Capacitor v7:
 | v7         | v1     |
 
 ```sh
-npm install @capacitor-community/background-geolocation
+npm install @capgo/background-geolocation
 npx cap update
 ```
 
