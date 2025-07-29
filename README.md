@@ -6,7 +6,8 @@
   <h2><a href="https://capgo.app/consulting/?ref=plugin"> Missing a feature? We’ll build the plugin for you 💪</a></h2>
 </div>
 
-A Capacitor plugin that lets you receive geolocation updates even while the app is backgrounded. Only iOS and Android platforms are supported.
+A Capacitor plugin that lets you receive geolocation updates even while the app is backgrounded.
+It has a web API to facilitate for a similar usage, but background geolocation is not supported in a regular browser, only in an app environment.
 
 ## Usage
 
@@ -121,12 +122,6 @@ function guess_location(callback, timeout) {
 }
 ```
 
-### Typescript support
-
-```typescript
-import { BackgroundGeolocation } from "@capgo/background-geolocation";
-```
-
 ## Installation
 
 This plugin supports Capacitor v7:
@@ -162,7 +157,7 @@ Add the following keys to `Info.plist.`:
 
 Set the the `android.useLegacyBridge` option to `true` in your Capacitor configuration. This prevents location updates halting after 5 minutes in the background. See https://capacitorjs.com/docs/config and https://github.com/capacitor-community/background-geolocation/issues/89.
 
-On Android 13+, the app needs the `POST_NOTIFICATIONS` runtime permission to show the persistent notification informing the user that their location is being used in the background. You may need to [request this permission](https://developer.android.com/develop/ui/views/notifications/notification-permission) from the user, this can be accomplished [using the `@capacitor/local-notifications` plugin](https://capacitorjs.com/docs/apis/local-notifications#checkpermissions).
+On Android 13+, the app needs the `POST_NOTIFICATIONS` runtime permission to show the persistent notification informing the user that their location is being used in the background. This runtime permission is requested after the location permission is granted.
 
 If your app forwards location updates to a server in real time, be aware that after 5 minutes in the background Android will throttle HTTP requests initiated from the WebView. The solution is to use a native HTTP plugin such as [CapacitorHttp](https://capacitorjs.com/docs/apis/http). See https://github.com/capacitor-community/background-geolocation/issues/14.
 
