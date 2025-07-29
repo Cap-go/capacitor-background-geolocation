@@ -29,8 +29,8 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 import com.google.android.gms.location.LocationServices;
-import org.json.JSONObject;
 import java.util.concurrent.CompletableFuture;
+import org.json.JSONObject;
 
 @CapacitorPlugin(
   name = "BackgroundGeolocation",
@@ -38,53 +38,58 @@ import java.util.concurrent.CompletableFuture;
     @Permission(
       strings = {
         Manifest.permission.ACCESS_COARSE_LOCATION,
-        Manifest.permission.ACCESS_FINE_LOCATION
+        Manifest.permission.ACCESS_FINE_LOCATION,
       },
       alias = "location"
     ),
     @Permission(
-      strings = {
-        Manifest.permission.POST_NOTIFICATIONS
-      },
+      strings = { Manifest.permission.POST_NOTIFICATIONS },
       alias = "notification"
-    )
+    ),
   }
 )
 public class BackgroundGeolocation extends Plugin {
 
-  private CompletableFuture<BackgroundGeolocationService.LocalBinder> serviceConnectionFuture;
+  private CompletableFuture<
+    BackgroundGeolocationService.LocalBinder
+  > serviceConnectionFuture;
   private CompletableFuture<Void> locationPermissionFuture;
 
   private void fetchLastLocation(PluginCall call) {
-   try {
+    try {
       LocationServices.getFusedLocationProviderClient(getContext())
         .getLastLocation()
-        .addOnSuccessListener(
-          getActivity(),
-            location -> {
-              if (location != null) {
-                call.resolve(formatLocation(location));
-            }
+        .addOnSuccessListener(getActivity(), location -> {
+          if (location != null) {
+            call.resolve(formatLocation(location));
           }
-        );
+        });
     } catch (SecurityException ignore) {}
   }
 
   @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
   public void addWatcher(final PluginCall call) {
-    if (getPermissionState("location") != PermissionState.GRANTED && !call.getBoolean("requestPermissions", true)) {
+    if (
+      getPermissionState("location") != PermissionState.GRANTED &&
+      !call.getBoolean("requestPermissions", true)
+    ) {
       call.reject("User denied location permission", "NOT_AUTHORIZED");
       return;
     }
 
-    if (getPermissionState("location") != PermissionState.GRANTED && call.getBoolean("requestPermissions", true)) {
+    if (
+      getPermissionState("location") != PermissionState.GRANTED &&
+      call.getBoolean("requestPermissions", true)
+    ) {
       call.setKeepAlive(true);
-      requestLocationPermissions(call).thenRun(() -> {
-        proceedWithWatcher(call);
-      }).exceptionally(throwable -> {
-        call.reject("User denied location permission", "NOT_AUTHORIZED");
-        return null;
-      });
+      requestLocationPermissions(call)
+        .thenRun(() -> {
+          proceedWithWatcher(call);
+        })
+        .exceptionally(throwable -> {
+          call.reject("User denied location permission", "NOT_AUTHORIZED");
+          return null;
+        });
       return;
     }
 
@@ -104,12 +109,12 @@ public class BackgroundGeolocation extends Plugin {
       fetchLastLocation(call);
     }
     getServiceConnection().thenAccept(serviceBinder -> {
-      serviceBinder.addWatcher(
-        call.getCallbackId(),
-        createBackgroundNotification(call),
-        call.getFloat("distanceFilter", 0f)
-      );
-    });
+        serviceBinder.addWatcher(
+          call.getCallbackId(),
+          createBackgroundNotification(call),
+          call.getFloat("distanceFilter", 0f)
+        );
+      });
   }
 
   private CompletableFuture<Void> requestLocationPermissions(PluginCall call) {
@@ -125,9 +130,7 @@ public class BackgroundGeolocation extends Plugin {
     String backgroundMessage = call.getString("backgroundMessage", "");
 
     Notification.Builder builder = new Notification.Builder(getContext())
-      .setContentTitle(
-        call.getString("backgroundTitle", "Using your location")
-      )
+      .setContentTitle(call.getString("backgroundTitle", "Using your location"))
       .setContentText(backgroundMessage)
       .setOngoing(true)
       .setPriority(Notification.PRIORITY_HIGH)
@@ -142,9 +145,7 @@ public class BackgroundGeolocation extends Plugin {
       // It is actually necessary to set a valid icon for the notification to behave
       // correctly when tapped. If there is no icon specified, tapping it will open the
       // app's settings, rather than bringing the application to the foreground.
-      builder.setSmallIcon(
-        getAppResourceIdentifier(parts[1], parts[0])
-      );
+      builder.setSmallIcon(getAppResourceIdentifier(parts[1], parts[0]));
     } catch (Exception e) {
       Logger.error("Could not set notification icon", e);
     }
@@ -176,9 +177,11 @@ public class BackgroundGeolocation extends Plugin {
       );
     }
 
-      // Set the Channel ID for Android O.
+    // Set the Channel ID for Android O.
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      builder.setChannelId(BackgroundGeolocationService.class.getPackage().getName());
+      builder.setChannelId(
+        BackgroundGeolocationService.class.getPackage().getName()
+      );
     }
 
     return builder.build();
@@ -190,10 +193,16 @@ public class BackgroundGeolocation extends Plugin {
       return;
     }
 
-    requestPermissionForAlias("notification", call, "notificationPermissionsCallback");
+    requestPermissionForAlias(
+      "notification",
+      call,
+      "notificationPermissionsCallback"
+    );
 
     if (getPermissionState("location") != PermissionState.GRANTED) {
-      locationPermissionFuture.completeExceptionally(new SecurityException("User denied location permission"));
+      locationPermissionFuture.completeExceptionally(
+        new SecurityException("User denied location permission")
+      );
       locationPermissionFuture = null;
       return;
     }
@@ -204,7 +213,7 @@ public class BackgroundGeolocation extends Plugin {
 
   @PermissionCallback
   private void notificationPermissionsCallback(PluginCall call) {
-      Logger.debug("notification permission callback");
+    Logger.debug("notification permission callback");
   }
 
   @PluginMethod
@@ -215,17 +224,19 @@ public class BackgroundGeolocation extends Plugin {
       return;
     }
 
-    getServiceConnection().thenAccept(service -> {
-      service.removeWatcher(callbackId);
-      PluginCall savedCall = getBridge().getSavedCall(callbackId);
-      if (savedCall != null) {
-        savedCall.release(getBridge());
-      }
-      call.resolve();
-    }).exceptionally(throwable -> {
-      call.reject("Service connection failed: " + throwable.getMessage());
-      return null;
-    });
+    getServiceConnection()
+      .thenAccept(service -> {
+        service.removeWatcher(callbackId);
+        PluginCall savedCall = getBridge().getSavedCall(callbackId);
+        if (savedCall != null) {
+          savedCall.release(getBridge());
+        }
+        call.resolve();
+      })
+      .exceptionally(throwable -> {
+        call.reject("Service connection failed: " + throwable.getMessage());
+        return null;
+      });
   }
 
   @PluginMethod
@@ -262,10 +273,16 @@ public class BackgroundGeolocation extends Plugin {
     obj.put("longitude", location.getLongitude());
     // The docs state that all Location objects have an accuracy, but then why is there a
     // hasAccuracy method? Better safe than sorry.
-    obj.put("accuracy", location.hasAccuracy() ? location.getAccuracy() : JSONObject.NULL);
-    obj.put("altitude", location.hasAltitude() ? location.getAltitude() : JSONObject.NULL);
+    obj.put(
+      "accuracy",
+      location.hasAccuracy() ? location.getAccuracy() : JSONObject.NULL
+    );
+    obj.put(
+      "altitude",
+      location.hasAltitude() ? location.getAltitude() : JSONObject.NULL
+    );
     if (Build.VERSION.SDK_INT >= 26 && location.hasVerticalAccuracy()) {
-    obj.put("altitudeAccuracy", location.getVerticalAccuracyMeters());
+      obj.put("altitudeAccuracy", location.getVerticalAccuracyMeters());
     } else {
       obj.put("altitudeAccuracy", JSONObject.NULL);
     }
@@ -273,8 +290,14 @@ public class BackgroundGeolocation extends Plugin {
     // installation of apps which have the power to simulate location
     // readings in other apps.
     obj.put("simulated", location.isFromMockProvider());
-    obj.put("speed", location.hasSpeed() ? location.getSpeed() : JSONObject.NULL);
-    obj.put("bearing", location.hasBearing() ? location.getBearing() : JSONObject.NULL);
+    obj.put(
+      "speed",
+      location.hasSpeed() ? location.getSpeed() : JSONObject.NULL
+    );
+    obj.put(
+      "bearing",
+      location.hasBearing() ? location.getBearing() : JSONObject.NULL
+    );
     obj.put("time", location.getTime());
     return obj;
   }
@@ -341,35 +364,45 @@ public class BackgroundGeolocation extends Plugin {
     );
   }
 
-  private CompletableFuture<BackgroundGeolocationService.LocalBinder> getServiceConnection() {
-    if (serviceConnectionFuture != null && !serviceConnectionFuture.isCompletedExceptionally()) {
+  private CompletableFuture<
+    BackgroundGeolocationService.LocalBinder
+  > getServiceConnection() {
+    if (
+      serviceConnectionFuture != null &&
+      !serviceConnectionFuture.isCompletedExceptionally()
+    ) {
       return serviceConnectionFuture;
     }
 
     serviceConnectionFuture = new CompletableFuture<>();
 
-    Intent serviceIntent = new Intent(this.getContext(), BackgroundGeolocationService.class);
+    Intent serviceIntent = new Intent(
+      this.getContext(),
+      BackgroundGeolocationService.class
+    );
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-        this.getContext().startForegroundService(serviceIntent);
+      this.getContext().startForegroundService(serviceIntent);
     } else {
       this.getContext().startService(serviceIntent);
     }
 
     this.getContext().bindService(
-      serviceIntent,
-      new ServiceConnection() {
-      @Override
-      public void onServiceConnected(ComponentName name, IBinder binder) {
-        serviceConnectionFuture.complete((BackgroundGeolocationService.LocalBinder) binder);
-      }
+        serviceIntent,
+        new ServiceConnection() {
+          @Override
+          public void onServiceConnected(ComponentName name, IBinder binder) {
+            serviceConnectionFuture.complete(
+              (BackgroundGeolocationService.LocalBinder) binder
+            );
+          }
 
-      @Override
-        public void onServiceDisconnected(ComponentName name) {
-          serviceConnectionFuture = null;
-        }
-      },
-      Context.BIND_AUTO_CREATE
-    );
+          @Override
+          public void onServiceDisconnected(ComponentName name) {
+            serviceConnectionFuture = null;
+          }
+        },
+        Context.BIND_AUTO_CREATE
+      );
 
     return serviceConnectionFuture;
   }
@@ -387,10 +420,14 @@ public class BackgroundGeolocation extends Plugin {
   @Override
   protected void handleOnDestroy() {
     if (serviceConnectionFuture != null) {
-      serviceConnectionFuture.thenAccept(BackgroundGeolocationService.LocalBinder::stopService);
+      serviceConnectionFuture.thenAccept(
+        BackgroundGeolocationService.LocalBinder::stopService
+      );
     }
 
-    if (locationPermissionFuture != null && !locationPermissionFuture.isDone()) {
+    if (
+      locationPermissionFuture != null && !locationPermissionFuture.isDone()
+    ) {
       locationPermissionFuture.cancel(true);
     }
     super.handleOnDestroy();

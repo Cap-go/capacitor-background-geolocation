@@ -1,4 +1,5 @@
 package com.capgo.capacitor_background_geolocation;
+
 import android.app.Notification;
 import android.app.Service;
 import android.content.Context;
@@ -15,6 +16,7 @@ import java.util.HashSet;
 // (showing a persistent notification) when the first background watcher is
 // added, and demoted when the last background watcher is removed.
 public class BackgroundGeolocationService extends Service {
+
   static final String ACTION_BROADCAST =
     (BackgroundGeolocationService.class.getPackage().getName() + ".broadcast");
   private final IBinder binder = new LocalBinder();
@@ -23,6 +25,7 @@ public class BackgroundGeolocationService extends Service {
   private static final int NOTIFICATION_ID = 28351;
 
   private static class Watcher {
+
     public String id;
     public LocationManager client;
     public float distanceFilter;
@@ -60,9 +63,9 @@ public class BackgroundGeolocationService extends Service {
         watcher.locationCallback
       );
     } catch (SecurityException ignore) {
-    // According to Android Studio, this method can throw a Security Exception if
-    // permissions are not yet granted. Rather than check the permissions, which is fiddly,
-    // we simply ignore the exception.
+      // According to Android Studio, this method can throw a Security Exception if
+      // permissions are not yet granted. Rather than check the permissions, which is fiddly,
+      // we simply ignore the exception.
     }
   }
 
@@ -74,15 +77,17 @@ public class BackgroundGeolocationService extends Service {
       Notification backgroundNotification,
       float distanceFilter
     ) {
-      LocationManager locationManager = (LocationManager)getSystemService(Context.LOCATION_SERVICE);
+      LocationManager locationManager = (LocationManager) getSystemService(
+        Context.LOCATION_SERVICE
+      );
 
       LocationListener listener = location -> {
-          Intent intent = new Intent(ACTION_BROADCAST);
-          intent.putExtra("location", location);
-          intent.putExtra("id", id);
-          LocalBroadcastManager.getInstance(
-            getApplicationContext()
-          ).sendBroadcast(intent);
+        Intent intent = new Intent(ACTION_BROADCAST);
+        intent.putExtra("location", location);
+        intent.putExtra("id", id);
+        LocalBroadcastManager.getInstance(
+          getApplicationContext()
+        ).sendBroadcast(intent);
       };
 
       Watcher watcher = new Watcher();
@@ -118,8 +123,8 @@ public class BackgroundGeolocationService extends Service {
           watchers.remove(watcher);
           break;
         }
-     }
-     if (watchers.isEmpty()) {
+      }
+      if (watchers.isEmpty()) {
         stopService();
       }
     }
