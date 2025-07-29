@@ -18,10 +18,10 @@
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/Cap-go/capacitor-inappbrowser.git"
+        "url": "git+https://github.com/Cap-go/background-geolocation.git"
     },
     "bugs": {
-        "url": "https://github.com/Cap-go/capacitor-inappbrowser/issues"
+        "url": "https://github.com/Cap-go/background-geolocation/issues"
     },
     "scripts": {
         "verify": "npm run verify:ios && npm run verify:android && npm run verify:web",

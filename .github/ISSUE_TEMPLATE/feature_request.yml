@@ -41,5 +41,5 @@ body:
       description: |
         Founding is a great way to get your feature added fast. This make community contributions more likely to happen and discharge the maintainers from the burden of being the only one adding features.
       options:
-      - label: I want to get this feature ASAP and [found the issue with Algora](https://console.algora.io/org/gl/bounties/community?fund=Cap-go%2Fcapacitor-inappbrowser) we recommend ($100 to $1000)
+      - label: I want to get this feature ASAP and [found the issue with Algora](https://console.algora.io/org/gl/bounties/community?fund=Cap-go%2Fbackground-geolocation) we recommend ($100 to $1000)
         required: false

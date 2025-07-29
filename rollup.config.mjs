@@ -4,7 +4,7 @@ export default {
     {
       file: 'dist/plugin.js',
       format: 'iife',
-      name: 'capacitorInAppBrowser',
+      name: 'capacitorBackgroundGeolocation',
       globals: {
         '@capacitor/core': 'capacitorExports',
       },
