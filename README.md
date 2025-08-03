@@ -208,8 +208,8 @@ Configration specific to Android can be made in `strings.xml`:
 
 <docgen-index>
 
-* [`addWatcher(...)`](#addwatcher)
-* [`removeWatcher(...)`](#removewatcher)
+* [`start(...)`](#start)
+* [`stop()`](#stop)
 * [`openSettings()`](#opensettings)
 * [Interfaces](#interfaces)
 

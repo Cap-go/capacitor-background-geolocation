@@ -1,17 +1,14 @@
 package com.capgo.capacitor_background_geolocation;
 
 import android.Manifest;
-import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
-import android.graphics.Color;
 import android.location.Location;
 import android.location.LocationManager;
 import android.net.Uri;
@@ -68,12 +65,17 @@ public class BackgroundGeolocation extends Plugin {
   }
 
   @PluginMethod(returnType = PluginMethod.RETURN_CALLBACK)
-  public void addWatcher(final PluginCall call) {
+  public void start(final PluginCall call) {
     if (
       getPermissionState("location") != PermissionState.GRANTED &&
       !call.getBoolean("requestPermissions", true)
     ) {
       call.reject("User denied location permission", "NOT_AUTHORIZED");
+      return;
+    }
+
+    if (serviceConnectionFuture != null) {
+      call.reject("Service already started", "ALREADY_STARTED");
       return;
     }
 
@@ -84,7 +86,7 @@ public class BackgroundGeolocation extends Plugin {
       call.setKeepAlive(true);
       requestLocationPermissions(call)
         .thenRun(() -> {
-          proceedWithWatcher(call);
+          proceedWithStart(call);
         })
         .exceptionally(throwable -> {
           call.reject("User denied location permission", "NOT_AUTHORIZED");
@@ -101,17 +103,18 @@ public class BackgroundGeolocation extends Plugin {
 
     // Everything is OK, continuing to adding a watcher
     call.setKeepAlive(true);
-    proceedWithWatcher(call);
+    proceedWithStart(call);
   }
 
-  private void proceedWithWatcher(PluginCall call) {
+  private void proceedWithStart(PluginCall call) {
     if (call.getBoolean("stale", false)) {
       fetchLastLocation(call);
     }
     getServiceConnection().thenAccept(serviceBinder -> {
-        serviceBinder.addWatcher(
+        serviceBinder.start(
           call.getCallbackId(),
-          createBackgroundNotification(call),
+          call.getString("backgroundTitle", "Using your location"),
+          call.getString("backgroundMessage", ""),
           call.getFloat("distanceFilter", 0f)
         );
       });
@@ -124,67 +127,6 @@ public class BackgroundGeolocation extends Plugin {
     locationPermissionFuture = new CompletableFuture<>();
     requestPermissionForAlias("location", call, "locationPermissionsCallback");
     return locationPermissionFuture;
-  }
-
-  private Notification createBackgroundNotification(PluginCall call) {
-    String backgroundMessage = call.getString("backgroundMessage", "");
-
-    Notification.Builder builder = new Notification.Builder(getContext())
-      .setContentTitle(call.getString("backgroundTitle", "Using your location"))
-      .setContentText(backgroundMessage)
-      .setOngoing(true)
-      .setPriority(Notification.PRIORITY_HIGH)
-      .setWhen(System.currentTimeMillis());
-
-    try {
-      String name = getAppString(
-        "capacitor_background_geolocation_notification_icon",
-        "mipmap/ic_launcher"
-      );
-      String[] parts = name.split("/");
-      // It is actually necessary to set a valid icon for the notification to behave
-      // correctly when tapped. If there is no icon specified, tapping it will open the
-      // app's settings, rather than bringing the application to the foreground.
-      builder.setSmallIcon(getAppResourceIdentifier(parts[1], parts[0]));
-    } catch (Exception e) {
-      Logger.error("Could not set notification icon", e);
-    }
-
-    try {
-      String color = getAppString(
-        "capacitor_background_geolocation_notification_color",
-        null
-      );
-      if (color != null) {
-        builder.setColor(Color.parseColor(color));
-      }
-    } catch (Exception e) {
-      Logger.error("Could not set notification color", e);
-    }
-
-    Intent launchIntent = getContext()
-      .getPackageManager()
-      .getLaunchIntentForPackage(getContext().getPackageName());
-    if (launchIntent != null) {
-      launchIntent.addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT);
-      builder.setContentIntent(
-        PendingIntent.getActivity(
-          getContext(),
-          0,
-          launchIntent,
-          PendingIntent.FLAG_CANCEL_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        )
-      );
-    }
-
-    // Set the Channel ID for Android O.
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-      builder.setChannelId(
-        BackgroundGeolocationService.class.getPackage().getName()
-      );
-    }
-
-    return builder.build();
   }
 
   @PermissionCallback
@@ -217,21 +159,19 @@ public class BackgroundGeolocation extends Plugin {
   }
 
   @PluginMethod
-  public void removeWatcher(PluginCall call) {
-    String callbackId = call.getString("id");
-    if (callbackId == null) {
-      call.reject("Missing id.");
-      return;
+  public void stop(PluginCall call) {
+    if (serviceConnectionFuture == null) {
+      call.resolve();
     }
-
     getServiceConnection()
       .thenAccept(service -> {
-        service.removeWatcher(callbackId);
+        var callbackId = service.stop();
         PluginCall savedCall = getBridge().getSavedCall(callbackId);
         if (savedCall != null) {
           savedCall.release(getBridge());
         }
         call.resolve();
+        serviceConnectionFuture = null;
       })
       .exceptionally(throwable -> {
         call.reject("Service connection failed: " + throwable.getMessage());
@@ -321,19 +261,6 @@ public class BackgroundGeolocation extends Plugin {
     }
   }
 
-  // Gets the identifier of the app's resource by name, returning 0 if not found.
-  private int getAppResourceIdentifier(String name, String defType) {
-    return getContext()
-      .getResources()
-      .getIdentifier(name, defType, getContext().getPackageName());
-  }
-
-  // Gets a string from the app's strings.xml file, resorting to a fallback if it is not defined.
-  private String getAppString(String name, String fallback) {
-    int id = getAppResourceIdentifier(name, "string");
-    return id == 0 ? fallback : getContext().getString(id);
-  }
-
   @Override
   public void load() {
     super.load();
@@ -346,9 +273,10 @@ public class BackgroundGeolocation extends Plugin {
         );
       NotificationChannel channel = new NotificationChannel(
         BackgroundGeolocationService.class.getPackage().getName(),
-        getAppString(
+        BackgroundGeolocationService.getAppString(
           "capacitor_background_geolocation_notification_channel_name",
-          "Background Tracking"
+          "Background Tracking",
+          getContext()
         ),
         NotificationManager.IMPORTANCE_DEFAULT
       );
@@ -408,20 +336,10 @@ public class BackgroundGeolocation extends Plugin {
   }
 
   @Override
-  protected void handleOnResume() {
-    super.handleOnResume();
-  }
-
-  @Override
-  protected void handleOnPause() {
-    super.handleOnPause();
-  }
-
-  @Override
   protected void handleOnDestroy() {
     if (serviceConnectionFuture != null) {
       serviceConnectionFuture.thenAccept(
-        BackgroundGeolocationService.LocalBinder::stopService
+        BackgroundGeolocationService.LocalBinder::stop
       );
     }
 
