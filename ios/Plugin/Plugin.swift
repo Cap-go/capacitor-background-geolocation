@@ -110,6 +110,10 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
         DispatchQueue.main.async {
             self.stopUpdatingLocation()
 
+            self.locationManager?.delegate = nil
+            self.locationManager = nil
+            self.created = nil
+
             if let callbackId = self.activeCallbackId {
                 if let savedCall = self.bridge?.savedCall(withID: callbackId) {
                     self.bridge?.releaseCall(savedCall)
