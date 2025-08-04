@@ -172,19 +172,19 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
                 location.timestamp >= created
         )
     }
-    
+
     @objc func playSound(_ call: CAPPluginCall) {
         // Use a background queue for audio loading to avoid blocking the main thread
         DispatchQueue.global(qos: .background).async { [weak self] in
             guard let self = self else { return }
-            
-            let assetPath = "public/" + (call.getString("soundFile") ?? "");
+
+            let assetPath = "public/" + (call.getString("soundFile") ?? "")
             let assetPathSplit = assetPath.components(separatedBy: ".")
             guard let url = Bundle.main.url(forResource: assetPathSplit[0], withExtension: assetPathSplit[1]) else {
                 call.reject("Sound file not found: \(assetPath)")
                 return
             }
-            
+
             do {
                 // Initialize the audio player
                 self.audioPlayer = try AVAudioPlayer(contentsOf: url)
