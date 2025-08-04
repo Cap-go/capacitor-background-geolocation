@@ -42,6 +42,12 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
     private var isUpdatingLocation: Bool = false
     private var activeCallbackId: String?
     private var audioPlayer: AVAudioPlayer?
+    private var plannedRoute: [[Double]] = []
+    private var isOffRoute: Bool = false
+    private var distanceThreshold: Double = 50.0 // Default distance threshold in meters
+
+    // Earth radius in meters for distance calculations
+    private static let EARTH_RADIUS_M: Double = 6371000.0
 
     @objc override public func load() {
         UIDevice.current.isBatteryMonitoringEnabled = true
@@ -149,6 +155,54 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
         }
     }
 
+    @objc func setPlannedRoute(_ call: CAPPluginCall) {
+        DispatchQueue.global(qos: .background).async { [weak self] in
+            guard let self = self else { return }
+
+            // Get the sound file path
+            guard let soundFile = call.getString("soundFile") else {
+                call.reject("Sound file is required")
+                return
+            }
+
+            // Get the route array
+            let routeArray = call.getArray("route", JSObject.self) ?? []
+            var route: [[Double]] = []
+
+            for routePoint in routeArray {
+                if let pointArray = routePoint as? [Double], pointArray.count == 2 {
+                    route.append(pointArray)
+                }
+            }
+
+            // Get distance threshold
+            let distance = call.getDouble("distance") ?? 50.0
+
+            // Set up audio player
+            let assetPath = "public/" + soundFile
+            let assetPathSplit = assetPath.components(separatedBy: ".")
+            guard let url = Bundle.main.url(forResource: assetPathSplit[0], withExtension: assetPathSplit[1]) else {
+                call.reject("Sound file not found: \(assetPath)")
+                return
+            }
+
+            do {
+                self.audioPlayer?.stop()
+                self.audioPlayer = nil
+                self.audioPlayer = try AVAudioPlayer(contentsOf: url)
+
+                // Store route configuration
+                self.plannedRoute = route
+                self.distanceThreshold = distance
+                self.isOffRoute = true
+
+                call.resolve()
+            } catch {
+                call.reject("Could not load the sound file: \(error.localizedDescription)")
+            }
+        }
+    }
+
     private func startUpdatingLocation() {
         // Avoid unnecessary calls to startUpdatingLocation, which can
         // result in extraneous invocations of didFailWithError.
@@ -173,28 +227,104 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
         )
     }
 
-    @objc func playSound(_ call: CAPPluginCall) {
-        // Use a background queue for audio loading to avoid blocking the main thread
-        DispatchQueue.global(qos: .background).async { [weak self] in
-            guard let self = self else { return }
+    private func toRadians(_ degrees: Double) -> Double {
+        return degrees * Double.pi / 180.0
+    }
 
-            let assetPath = "public/" + (call.getString("soundFile") ?? "")
-            let assetPathSplit = assetPath.components(separatedBy: ".")
-            guard let url = Bundle.main.url(forResource: assetPathSplit[0], withExtension: assetPathSplit[1]) else {
-                call.reject("Sound file not found: \(assetPath)")
-                return
+    private func haversine(_ point1: [Double], _ point2: [Double]) -> Double {
+        let lon1 = point1[0]
+        let lat1 = point1[1]
+        let lon2 = point2[0]
+        let lat2 = point2[1]
+
+        let dLat = toRadians(lat2 - lat1)
+        let dLon = toRadians(lon2 - lon1)
+
+        let aaa = sin(dLat / 2) * sin(dLat / 2) +
+            cos(toRadians(lat1)) * cos(toRadians(lat2)) *
+            sin(dLon / 2) * sin(dLon / 2)
+
+        let ccc = 2 * atan2(sqrt(aaa), sqrt(1 - aaa))
+
+        return BackgroundGeolocation.EARTH_RADIUS_M * ccc
+    }
+
+    private func distancePointToLineSegment(_ point: [Double], _ lineStart: [Double], _ lineEnd: [Double]) -> Double {
+        // Calculate the distances between the three points using Haversine
+        let distAB = haversine(point, lineStart)
+        let distAC = haversine(point, lineEnd)
+        let distBC = haversine(lineStart, lineEnd)
+
+        // Handle the edge case where the line segment is a single point
+        if distBC == 0 {
+            return distAB
+        }
+
+        // Check if the angles at the line segment's endpoints are obtuse.
+        // We use the Law of Cosines (c^2 = a^2 + b^2 - 2ab*cos(C))
+        // If cos(C) < 0, the angle is obtuse.
+
+        // Angle at B (lineStart)
+        let epsilon = Double.ulpOfOne
+        let cosB = (pow(distAB, 2) + pow(distBC, 2) - pow(distAC, 2)) / (2 * distAB * distBC + epsilon)
+        if cosB < 0 {
+            return distAB
+        }
+
+        // Angle at C (lineEnd)
+        let cosC = (pow(distAC, 2) + pow(distBC, 2) - pow(distAB, 2)) / (2 * distAC * distBC + epsilon)
+        if cosC < 0 {
+            return distAC
+        }
+
+        // If both angles are acute, the closest point is on the line segment itself.
+        // We can calculate the distance (height of the triangle) using its area.
+
+        // 1. Calculate the semi-perimeter of the triangle ABC
+        let semi = (distAB + distAC + distBC) / 2
+
+        // 2. Calculate the area using Heron's formula
+        let area = sqrt(max(0, semi * (semi - distAB) * (semi - distAC) * (semi - distBC)))
+
+        // 3. The distance is the height of the triangle from point A to the base BC
+        // Area = 0.5 * base * height  =>  height = 2 * Area / base
+        return (2 * area) / (distBC + epsilon)
+    }
+
+    private func distancePointToRoute(_ point: [Double]) -> Double {
+        // If the route has less than 2 points, we can't form a segment.
+        if plannedRoute.count < 2 {
+            if plannedRoute.count == 1 {
+                return haversine(point, plannedRoute[0])
             }
+            return Double.infinity // No line segments to measure against
+        }
 
-            do {
-                self.audioPlayer?.stop()
-                self.audioPlayer = nil
-                self.audioPlayer = try AVAudioPlayer(contentsOf: url)
-                self.audioPlayer?.play()
-                call.resolve()
-            } catch {
-                call.reject("Could not play the sound file: \(error.localizedDescription)")
+        var minDistance = Double.infinity
+
+        for pointIndex in 0..<(plannedRoute.count - 1) {
+            let lineStart = plannedRoute[pointIndex]
+            let lineEnd = plannedRoute[pointIndex + 1]
+            let distance = distancePointToLineSegment(point, lineStart, lineEnd)
+            if distance < minDistance {
+                minDistance = distance
             }
         }
+
+        return minDistance
+    }
+
+    private func checkRouteDeviation(_ location: CLLocation) {
+        guard audioPlayer != nil && plannedRoute.count > 0 else { return }
+
+        let currentPoint = [location.coordinate.longitude, location.coordinate.latitude]
+        let offRoute = distancePointToRoute(currentPoint) > distanceThreshold
+
+        if offRoute && !isOffRoute {
+            audioPlayer?.play()
+        }
+
+        isOffRoute = offRoute
     }
 
     public func locationManager(
@@ -233,6 +363,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
         }
 
         if isLocationValid(location) {
+            checkRouteDeviation(location)
             return call.resolve(formatLocation(location))
         }
     }

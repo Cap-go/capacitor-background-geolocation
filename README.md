@@ -58,14 +58,16 @@ BackgroundGeolocation.start(
             }
             return console.error(error);
         }
-        // in case of off-track for example, play a sound:
-        BackgroundGeolocation.playSound({soundFile: "assets/myFile.mp3" });
         return console.log(location);
     }
 ).then(() => {
     // When location updates are no longer needed, the plugin should be stopped by calling
     BackgroundGeolocation.stop();
 });
+
+// Set a planned route to get a notification sound when a new location arrives and it's not on the route:
+        
+BackgroundGeolocation.setPlannedRoute({soundFile: "assets/myFile.mp3", route: [[1,2], [3,4]], distance: 30 });
 
 // If you just want the current location, try something like this. The longer
 // the timeout, the more accurate the guess will be. I wouldn't go below about 100ms.
@@ -177,7 +179,7 @@ Configration specific to Android can be made in `strings.xml`:
 * [`start(...)`](#start)
 * [`stop()`](#stop)
 * [`openSettings()`](#opensettings)
-* [`playSound(...)`](#playsound)
+* [`setPlannedRoute(...)`](#setplannedroute)
 * [Interfaces](#interfaces)
 
 </docgen-index>
@@ -235,23 +237,20 @@ Useful for directing users to enable location services or adjust permissions.
 --------------------
 
 
-### playSound(...)
+### setPlannedRoute(...)
 
 ```typescript
-playSound(options: PlaySoundOptions) => Promise<void>
+setPlannedRoute(options: SetPlannedRouteOptions) => Promise<void>
 ```
 
-Plays a sound file.
-This should be used to play a sound, in the background too.
-The idea behind this is to allow the user to hear a sound when a new location is available or when going off track.
-If you simply need to play a sound, you can use `@capgo/native-audio` plugin instead.
-For Android, there's a need to start monitoring location updates first, otherwise the sound will not play.
+Plays a sound file when the user deviates from the planned route.
+This should be used to play a sound, in the background too (only for native).
 
-| Param         | Type                                                          | Description                       |
-| ------------- | ------------------------------------------------------------- | --------------------------------- |
-| **`options`** | <code><a href="#playsoundoptions">PlaySoundOptions</a></code> | The options for playing the sound |
+| Param         | Type                                                                      | Description                                              |
+| ------------- | ------------------------------------------------------------------------- | -------------------------------------------------------- |
+| **`options`** | <code><a href="#setplannedrouteoptions">SetPlannedRouteOptions</a></code> | The options for setting the planned route and sound file |
 
-**Since:** 7.0.10
+**Since:** 7.0.11
 
 --------------------
 
@@ -300,10 +299,12 @@ Extends the standard Error with optional error codes.
 | **`code`** | <code>string</code> | Optional error code for more specific error handling. | 7.0.0 |
 
 
-#### PlaySoundOptions
+#### SetPlannedRouteOptions
 
-| Prop            | Type                | Description                                                                                                                                                                                             | Since  |
-| --------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
-| **`soundFile`** | <code>string</code> | The name of the sound file to play. Must be a valid sound relative path in the app's public folder to work for both web and native platforms. There's no need to include the public folder in the path. | 7.0.10 |
+| Prop            | Type                            | Description                                                                                                                                                                                                                                        | Default         | Since  |
+| --------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ------ |
+| **`soundFile`** | <code>string</code>             | The name of the sound file to play. Must be a valid sound relative path in the app's public folder to work for both web and native platforms. There's no need to include the public folder in the path.                                            |                 | 7.0.10 |
+| **`route`**     | <code>[number, number][]</code> | The planned route as an array of latitude and longitude pairs. Each pair represents a point on the route. This is used to define a route that the user can follow. The route is used to play a sound when the user deviates from it.               |                 | 7.0.11 |
+| **`distance`**  | <code>number</code>             | The distance in meters that the user must deviate from the planned route to trigger the sound. This is used to determine how far off the route the user can be before the sound is played. If not specified, a default value of 50 meters is used. | <code>50</code> | 7.0.11 |
 
 </docgen-api>

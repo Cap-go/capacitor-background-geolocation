@@ -165,7 +165,7 @@ export interface CallbackError extends Error {
   code?: string;
 }
 
-export interface PlaySoundOptions {
+export interface SetPlannedRouteOptions {
   /**
    * The name of the sound file to play.
    * Must be a valid sound relative path in the app's public folder to work for both web and native platforms.
@@ -174,6 +174,25 @@ export interface PlaySoundOptions {
    * @example "notification.mp3"
    * */
   soundFile: string;
+  /**
+   * The planned route as an array of latitude and longitude pairs.
+   * Each pair represents a point on the route.
+   * This is used to define a route that the user can follow.
+   * The route is used to play a sound when the user deviates from it.
+   * @since 7.0.11
+   * @example [[40.7128, -74.0060], [34.0522, -118.2437]]
+   */
+  route: [number, number][];
+
+  /**
+   * The distance in meters that the user must deviate from the planned route to trigger the sound.
+   * This is used to determine how far off the route the user can be before the sound is played.
+   * If not specified, a default value of 50 meters is used.
+   * @since 7.0.11
+   * @default 50
+   * @example 50
+   */
+  distance: number;
 }
 
 /**
@@ -243,20 +262,18 @@ export interface BackgroundGeolocationPlugin {
   openSettings(): Promise<void>;
 
   /**
-   * Plays a sound file.
-   * This should be used to play a sound, in the background too.
-   * The idea behind this is to allow the user to hear a sound when a new location is available or when going off track.
-   * If you simply need to play a sound, you can use `@capgo/native-audio` plugin instead.
-   * For Android, there's a need to start monitoring location updates first, otherwise the sound will not play.
+   * Plays a sound file when the user deviates from the planned route.
+   * This should be used to play a sound, in the background too (only for native).
    *
-   * @param options The options for playing the sound
-   * @returns A promise that resolves when the sound is successfully played
+   * @param options The options for setting the planned route and sound file
+   * @returns A promise that resolves when the route is set successfully
    *
-   * @since 7.0.10
+   * @since 7.0.11
    * @example
-   * await BackgroundGeolocation.playSound({
-   *   soundFile: "notification.mp3"
+   * await BackgroundGeolocation.setPlannedRoute({
+   *   soundFile: "notification.mp3",
+   *   route: [[40.7128, -74.0060], [34.0522, -118.2437]]
    * });
    */
-  playSound(options: PlaySoundOptions): Promise<void>;
+  setPlannedRoute(options: SetPlannedRouteOptions): Promise<void>;
 }

@@ -26,6 +26,8 @@ public class BackgroundGeolocationService extends Service {
     (BackgroundGeolocationService.class.getPackage().getName() + ".broadcast");
   private final IBinder binder = new LocalBinder();
 
+  private static final double EARTH_RADIUS_M = 6371000;
+
   // Must be unique for this application.
   private static final int NOTIFICATION_ID = 28351;
 
@@ -34,6 +36,9 @@ public class BackgroundGeolocationService extends Service {
   private LocationManager client;
   private LocationListener locationCallback;
   private MediaPlayer mediaPlayer;
+  private double[][] route;
+  private double distanceThreshold;
+  private boolean isOffRoute;
 
   @Override
   public IBinder onBind(Intent intent) {
@@ -84,11 +89,18 @@ public class BackgroundGeolocationService extends Service {
       float distanceFilter
     ) {
       releaseMediaPlayer();
-      mediaPlayer = new MediaPlayer();
       client = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
       callbackId = id;
 
       locationCallback = location -> {
+        if (mediaPlayer != null) {
+          double[] point = { location.getLongitude(), location.getLatitude() };
+          var offRoute = distancePointToRoute(point) > distanceThreshold;
+          if (offRoute == true && isOffRoute == false) {
+            mediaPlayer.start();
+          }
+          isOffRoute = offRoute;
+        }
         Intent intent = new Intent(ACTION_BROADCAST);
         intent.putExtra("location", location);
         intent.putExtra("id", callbackId);
@@ -137,11 +149,19 @@ public class BackgroundGeolocationService extends Service {
       return callbackId;
     }
 
-    void playSound(String filePath) {
+    void setPlannedRoute(
+      String filePath,
+      double[][] routeCoordinates,
+      float distance
+    ) {
+      route = routeCoordinates;
+      distanceThreshold = distance;
+      isOffRoute = true;
       try {
-        if (mediaPlayer == null) {
-          mediaPlayer = new MediaPlayer();
+        if (mediaPlayer != null) {
+          return;
         }
+        mediaPlayer = new MediaPlayer();
         AssetManager am = getApplicationContext().getResources().getAssets();
         AssetFileDescriptor assetFileDescriptor = am.openFd(
           "public/" + filePath
@@ -161,14 +181,6 @@ public class BackgroundGeolocationService extends Service {
         });
 
         mediaPlayer.prepareAsync();
-        mediaPlayer.setOnPreparedListener(mp -> {
-          try {
-            mp.start();
-          } catch (Exception e) {
-            Logger.error("Error starting MediaPlayer", e);
-            releaseMediaPlayer();
-          }
-        });
       } catch (Exception e) {
         Logger.error("PlaySound: Unexpected error", e);
         releaseMediaPlayer();
@@ -263,5 +275,101 @@ public class BackgroundGeolocationService extends Service {
   ) {
     int id = getAppResourceIdentifier(name, "string", context);
     return id == 0 ? fallback : context.getString(id);
+  }
+
+  private static double haversine(double[] point1, double[] point2) {
+    double lon1 = point1[0];
+    double lat1 = point1[1];
+    double lon2 = point2[0];
+    double lat2 = point2[1];
+
+    double dLat = Math.toRadians(lat2 - lat1);
+    double dLon = Math.toRadians(lon2 - lon1);
+
+    double a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(Math.toRadians(lat1)) *
+      Math.cos(Math.toRadians(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+
+    double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return EARTH_RADIUS_M * c;
+  }
+
+  private static double distancePointToLineSegment(
+    double[] point,
+    double[] lineStart,
+    double[] lineEnd
+  ) {
+    // Calculate the distances between the three points using Haversine
+    double dist_A_B = haversine(point, lineStart);
+    double dist_A_C = haversine(point, lineEnd);
+    double dist_B_C = haversine(lineStart, lineEnd);
+
+    // Handle the edge case where the line segment is a single point
+    if (dist_B_C == 0) {
+      return dist_A_B;
+    }
+
+    // Check if the angles at the line segment's endpoints are obtuse.
+    // We use the Law of Cosines (c^2 = a^2 + b^2 - 2ab*cos(C))
+    // If cos(C) < 0, the angle is obtuse.
+
+    // Angle at B (lineStart)
+    // Use a small epsilon to handle floating point inaccuracies in division by zero
+    double cos_B =
+      (Math.pow(dist_A_B, 2) + Math.pow(dist_B_C, 2) - Math.pow(dist_A_C, 2)) /
+      (2 * dist_A_B * dist_B_C);
+    if (cos_B < 0) {
+      return dist_A_B;
+    }
+
+    // Angle at C (lineEnd)
+    double cos_C =
+      (Math.pow(dist_A_C, 2) + Math.pow(dist_B_C, 2) - Math.pow(dist_A_B, 2)) /
+      (2 * dist_A_C * dist_B_C);
+    if (cos_C < 0) {
+      return dist_A_C;
+    }
+
+    // If both angles are acute, the closest point is on the line segment itself.
+    // We can calculate the distance (height of the triangle) using its area.
+
+    // 1. Calculate the semi-perimeter of the triangle ABC
+    double s = (dist_A_B + dist_A_C + dist_B_C) / 2;
+
+    // 2. Calculate the area using Heron's formula
+    double area = Math.sqrt(
+      Math.max(0, s * (s - dist_A_B) * (s - dist_A_C) * (s - dist_B_C))
+    );
+
+    // 3. The distance is the height of the triangle from point A to the base BC
+    // Area = 0.5 * base * height  =>  height = 2 * Area / base
+    return (2 * area) / dist_B_C;
+  }
+
+  public double distancePointToRoute(double[] point) {
+    // If the polyline has less than 2 points, we can't form a segment.
+    if (this.route.length < 2) {
+      if (this.route.length == 1) {
+        return haversine(point, this.route[0]);
+      }
+      return Double.POSITIVE_INFINITY; // No line segments to measure against
+    }
+
+    double minDistance = Double.POSITIVE_INFINITY;
+
+    for (int i = 0; i < this.route.length - 1; i++) {
+      double[] lineStart = this.route[i];
+      double[] lineEnd = this.route[i + 1];
+      double distance = distancePointToLineSegment(point, lineStart, lineEnd);
+      if (distance < minDistance) {
+        minDistance = distance;
+      }
+    }
+
+    return minDistance;
   }
 }
