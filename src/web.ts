@@ -5,6 +5,7 @@ import type {
   StartOptions,
   Location,
   CallbackError,
+  PlaySoundOptions,
 } from "./definitions";
 
 export class BackgroundGeolocationWeb
@@ -76,5 +77,17 @@ export class BackgroundGeolocationWeb
   async openSettings(): Promise<void> {
     console.log("openSettings: Web implementation cannot open native settings");
     window.alert("Please enable location permissions in your browser settings");
+  }
+
+  async playSound(options: PlaySoundOptions): Promise<void> {
+    if (!options.soundFile) {
+      throw new Error("Sound file is required");
+    }
+    const audio = new Audio(options.soundFile);
+    try {
+      await audio.play();
+    } catch (error) {
+      throw new Error(`Failed to play sound: ${(error as Error).message}`);
+    }
   }
 }
