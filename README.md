@@ -59,7 +59,7 @@ BackgroundGeolocation.start(
             return console.error(error);
         }
         // in case of off-track for example, play a sound:
-        BackgroundGeolocation.playSound({soundFile: "assests/myFile.mp3" });
+        BackgroundGeolocation.playSound({soundFile: "assets/myFile.mp3" });
         return console.log(location);
     }
 ).then(() => {

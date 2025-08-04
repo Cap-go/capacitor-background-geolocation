@@ -80,6 +80,14 @@ export class BackgroundGeolocationWeb
   }
 
   async playSound(options: PlaySoundOptions): Promise<void> {
-    new Audio(options.soundFile).play();
+    if (!options.soundFile) {
+      throw new Error("Sound file is required");
+    }
+    const audio = new Audio(options.soundFile);
+    try {
+      await audio.play();
+    } catch (error) {
+      throw new Error(`Failed to play sound: ${(error as Error).message}`);
+    }
   }
 }
