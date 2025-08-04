@@ -41,7 +41,7 @@ BackgroundGeolocation.start(
         stale: false,
         distanceFilter: 50
     },
-    function callback(location, error) {
+    (location, error) => {
         if (error) {
             if (error.code === "NOT_AUTHORIZED") {
                 if (window.confirm(
@@ -58,7 +58,8 @@ BackgroundGeolocation.start(
             }
             return console.error(error);
         }
-
+        // in case of off-track for example, play a sound:
+        BackgroundGeolocation.playSound({soundFile: "assests/myFile.mp3" });
         return console.log(location);
     }
 ).then(() => {
@@ -68,7 +69,7 @@ BackgroundGeolocation.start(
 
 // If you just want the current location, try something like this. The longer
 // the timeout, the more accurate the guess will be. I wouldn't go below about 100ms.
-function guess_location(callback, timeout) {
+function guessLocation(callback, timeout) {
     let last_location;
     BackgroundGeolocation.start(
         {
@@ -78,7 +79,7 @@ function guess_location(callback, timeout) {
         (location) => {
             last_location = location || undefined;
         }
-    ).then(() => 
+    ).then(() => {
         setTimeout(() => {
             callback(last_location);
             BackgroundGeolocation.stop();
