@@ -207,7 +207,7 @@ public class BackgroundGeolocation extends Plugin {
       return;
     }
     try {
-      double[][] javaDoubleArray = getJavaDoubleArray(call);
+      double[][] javaDoubleArray = getJavaDoubleArray(call.getArray("route"));
       serviceConnectionFuture
         .thenAccept(service -> {
           service.setPlannedRoute(
@@ -226,9 +226,8 @@ public class BackgroundGeolocation extends Plugin {
     }
   }
 
-  private static double[][] getJavaDoubleArray(PluginCall call)
+  private static double[][] getJavaDoubleArray(JSArray jsArray)
     throws JSONException {
-    JSArray jsArray = call.getArray("route");
     int rows = jsArray.length();
     if (rows == 0) {
       return new double[0][2];
@@ -242,8 +241,7 @@ public class BackgroundGeolocation extends Plugin {
     for (int i = 0; i < rows; i++) {
       JSONArray rowArray = jsArray.getJSONArray(i);
       if (rowArray.length() != cols) {
-        call.reject("Input array is not a consistent 2D array.");
-        return null;
+        throw new JSONException("Input array is not a consistent 2D array.");
       }
       for (int j = 0; j < cols; j++) {
         javaDoubleArray[i][j] = rowArray.getDouble(j);

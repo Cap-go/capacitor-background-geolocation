@@ -175,12 +175,12 @@ export interface SetPlannedRouteOptions {
    * */
   soundFile: string;
   /**
-   * The planned route as an array of latitude and longitude pairs.
+   * The planned route as an array of longitude and latitude pairs.
    * Each pair represents a point on the route.
    * This is used to define a route that the user can follow.
    * The route is used to play a sound when the user deviates from it.
    * @since 7.0.11
-   * @example [[40.7128, -74.0060], [34.0522, -118.2437]]
+   * @example [[-74.0060, 40.7128], [-118.2437, 34.0522]]
    */
   route: [number, number][];
 
@@ -263,7 +263,7 @@ export interface BackgroundGeolocationPlugin {
 
   /**
    * Plays a sound file when the user deviates from the planned route.
-   * This should be used to play a sound, in the background too (only for native).
+   * This should be used to play a sound (in the background too, only for native).
    *
    * @param options The options for setting the planned route and sound file
    * @returns A promise that resolves when the route is set successfully
@@ -272,7 +272,7 @@ export interface BackgroundGeolocationPlugin {
    * @example
    * await BackgroundGeolocation.setPlannedRoute({
    *   soundFile: "notification.mp3",
-   *   route: [[40.7128, -74.0060], [34.0522, -118.2437]]
+   *   route: [[-74.0060, 40.7128], [-118.2437, 34.0522]]
    * });
    */
   setPlannedRoute(options: SetPlannedRouteOptions): Promise<void>;
