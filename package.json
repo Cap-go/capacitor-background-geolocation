@@ -1,6 +1,6 @@
 {
     "name": "@capgo/background-geolocation",
-    "version": "7.0.8",
+    "version": "7.0.9",
     "description": "Receive geolocation updates even while the app is in the background.",
     "main": "dist/plugin.cjs.js",
     "module": "dist/esm/index.js",

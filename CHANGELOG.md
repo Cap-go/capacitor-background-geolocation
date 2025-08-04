@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file. See [standard-version](https://github.com/conventional-changelog/standard-version) for commit guidelines.
 
+### [7.0.9](https://github.com/Cap-go/background-geolocation/compare/7.0.8...7.0.9) (2025-08-04)
+
 ### [7.0.8](https://github.com/Cap-go/background-geolocation/compare/7.0.7...7.0.8) (2025-08-03)
 
 ### [7.0.7](https://github.com/Cap-go/background-geolocation/compare/7.0.6...7.0.7) (2025-07-29)
