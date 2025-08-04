@@ -103,7 +103,7 @@ export class BackgroundGeolocationWeb
     }
     if (this.audio) {
       this.audio.pause();
-      this.audio.src = '';
+      this.audio.src = "";
       this.audio = undefined;
     }
     this.audio = new Audio(options.soundFile);
