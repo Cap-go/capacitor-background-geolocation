@@ -1,9 +1,9 @@
 /**
- * The options for configuring a watcher that listens for location updates.
+ * The options for configuring for location updates.
  *
  * @since 1.0.0
  */
-export interface WatcherOptions {
+export interface StartOptions {
   /**
    * If the "backgroundMessage" option is defined, the watcher will
    * provide location updates whether the app is in the background or the
@@ -183,7 +183,7 @@ export interface BackgroundGeolocationPlugin {
    *
    * @since 1.0.0
    * @example
-   * const watcherId = await BackgroundGeolocation.addWatcher(
+   * await BackgroundGeolocation.start(
    *   {
    *     backgroundMessage: "App is using your location in the background",
    *     backgroundTitle: "Location Service",
@@ -202,23 +202,21 @@ export interface BackgroundGeolocationPlugin {
    *   }
    * );
    */
-  addWatcher(
-    options: WatcherOptions,
+  start(
+    options: StartOptions,
     callback: (position?: Location, error?: CallbackError) => void,
-  ): Promise<string>;
+  ): Promise<void>;
 
   /**
-   * Removes a watcher by its unique identifier.
-   * Stops location updates for the specified watcher.
+   * Stops location updates.
    *
-   * @param options Object containing the watcher ID to remove
    * @returns A promise that resolves when the watcher is successfully removed
    *
    * @since 1.0.0
    * @example
-   * await BackgroundGeolocation.removeWatcher({ id: watcherId });
+   * await BackgroundGeolocation.stop();
    */
-  removeWatcher(options: { id: string }): Promise<void>;
+  stop(): Promise<void>;
 
   /**
    * Opens the device's location settings page.

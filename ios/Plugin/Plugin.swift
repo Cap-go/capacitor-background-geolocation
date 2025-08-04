@@ -33,63 +33,41 @@ func formatLocation(_ location: CLLocation) -> PluginCallResultData {
     ]
 }
 
-class Watcher {
-    let callbackId: String
-    let locationManager: CLLocationManager = CLLocationManager()
-    private let created = Date()
-    private let allowStale: Bool
-    private var isUpdatingLocation: Bool = false
-    init(_ id: String, stale: Bool) {
-        callbackId = id
-        allowStale = stale
-    }
-    func start() {
-        // Avoid unnecessary calls to startUpdatingLocation, which can
-        // result in extraneous invocations of didFailWithError.
-        if !isUpdatingLocation {
-            locationManager.startUpdatingLocation()
-            isUpdatingLocation = true
-        }
-    }
-    func stop() {
-        if isUpdatingLocation {
-            locationManager.stopUpdatingLocation()
-            isUpdatingLocation = false
-        }
-    }
-    func isLocationValid(_ location: CLLocation) -> Bool {
-        return (
-            allowStale ||
-                location.timestamp >= created
-        )
-    }
-}
-
 @objc(BackgroundGeolocation)
 public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
-    private var watchers = [Watcher]()
+    private var locationManager: CLLocationManager?
+    private var created: Date?
+    private var allowStale: Bool = false
+    private var isUpdatingLocation: Bool = false
+    private var activeCallbackId: String?
 
     @objc override public func load() {
         UIDevice.current.isBatteryMonitoringEnabled = true
     }
 
-    @objc func addWatcher(_ call: CAPPluginCall) {
+    @objc func start(_ call: CAPPluginCall) {
         call.keepAlive = true
 
         // CLLocationManager requires main thread
         DispatchQueue.main.async {
+            // Check if already started
+            if self.locationManager != nil {
+                return call.reject("Location tracking already started", "ALREADY_STARTED")
+            }
+            // Create fresh location manager and initialize date
+            self.locationManager = CLLocationManager()
+            self.locationManager!.delegate = self
+            self.created = Date()
+
             let background = call.getString("backgroundMessage") != nil
-            let watcher = Watcher(
-                call.callbackId,
-                stale: call.getBool("stale") ?? false
-            )
-            let manager = watcher.locationManager
-            manager.delegate = self
+            self.allowStale = call.getBool("stale") ?? false
+            self.activeCallbackId = call.callbackId
+
             let externalPower = [
                 .full,
                 .charging
             ].contains(UIDevice.current.batteryState)
-            manager.desiredAccuracy = (
+            self.locationManager!.desiredAccuracy = (
                 externalPower
                     ? kCLLocationAccuracyBestForNavigation
                     : kCLLocationAccuracyBest
@@ -100,11 +78,11 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
             if distanceFilter == nil || distanceFilter == 0 {
                 distanceFilter = kCLDistanceFilterNone
             }
-            manager.distanceFilter = distanceFilter!
-            manager.allowsBackgroundLocationUpdates = background
-            manager.showsBackgroundLocationIndicator = background
-            manager.pausesLocationUpdatesAutomatically = false
-            self.watchers.append(watcher)
+            self.locationManager!.distanceFilter = distanceFilter!
+            self.locationManager!.allowsBackgroundLocationUpdates = background
+            self.locationManager!.showsBackgroundLocationIndicator = background
+            self.locationManager!.pausesLocationUpdatesAutomatically = false
+
             if call.getBool("requestPermissions") != false {
                 let status = CLLocationManager.authorizationStatus()
                 if [
@@ -114,35 +92,35 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
                 ].contains(status) {
                     return (
                         background
-                            ? manager.requestAlwaysAuthorization()
-                            : manager.requestWhenInUseAuthorization()
+                            ? self.locationManager!.requestAlwaysAuthorization()
+                            : self.locationManager!.requestWhenInUseAuthorization()
                     )
                 }
                 if background && status == .authorizedWhenInUse {
                     // Attempt to escalate.
-                    manager.requestAlwaysAuthorization()
+                    self.locationManager!.requestAlwaysAuthorization()
                 }
             }
-            return watcher.start()
+            return self.startUpdatingLocation()
         }
     }
 
-    @objc func removeWatcher(_ call: CAPPluginCall) {
+    @objc func stop(_ call: CAPPluginCall) {
         // CLLocationManager requires main thread
         DispatchQueue.main.async {
-            if let callbackId = call.getString("id") {
-                if let index = self.watchers.firstIndex(
-                    where: { $0.callbackId == callbackId }
-                ) {
-                    self.watchers[index].locationManager.stopUpdatingLocation()
-                    self.watchers.remove(at: index)
-                }
+            self.stopUpdatingLocation()
+
+            self.locationManager?.delegate = nil
+            self.locationManager = nil
+            self.created = nil
+
+            if let callbackId = self.activeCallbackId {
                 if let savedCall = self.bridge?.savedCall(withID: callbackId) {
                     self.bridge?.releaseCall(savedCall)
                 }
-                return call.resolve()
+                self.activeCallbackId = nil
             }
-            return call.reject("No callback ID")
+            return call.resolve()
         }
     }
 
@@ -169,46 +147,67 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
         }
     }
 
+    private func startUpdatingLocation() {
+        // Avoid unnecessary calls to startUpdatingLocation, which can
+        // result in extraneous invocations of didFailWithError.
+        if !isUpdatingLocation, let manager = locationManager {
+            manager.startUpdatingLocation()
+            isUpdatingLocation = true
+        }
+    }
+
+    private func stopUpdatingLocation() {
+        if isUpdatingLocation, let manager = locationManager {
+            manager.stopUpdatingLocation()
+            isUpdatingLocation = false
+        }
+    }
+
+    private func isLocationValid(_ location: CLLocation) -> Bool {
+        guard let created = created else { return allowStale }
+        return (
+            allowStale ||
+                location.timestamp >= created
+        )
+    }
+
     public func locationManager(
         _ manager: CLLocationManager,
         didFailWithError error: Error
     ) {
-        if let watcher = self.watchers.first(
-            where: { $0.locationManager == manager }
-        ) {
-            if let call = self.bridge?.savedCall(withID: watcher.callbackId) {
-                if let clErr = error as? CLError {
-                    if clErr.code == .locationUnknown {
-                        // This error is sometimes sent by the manager if
-                        // it cannot get a fix immediately.
-                        return
-                    } else if clErr.code == .denied {
-                        watcher.stop()
-                        return call.reject(
-                            "Permission denied.",
-                            "NOT_AUTHORIZED"
-                        )
-                    }
-                }
-                return call.reject(error.localizedDescription, nil, error)
+        guard let callbackId = activeCallbackId,
+              let call = self.bridge?.savedCall(withID: callbackId) else {
+            return
+        }
+
+        if let clErr = error as? CLError {
+            if clErr.code == .locationUnknown {
+                // This error is sometimes sent by the manager if
+                // it cannot get a fix immediately.
+                return
+            } else if clErr.code == .denied {
+                stopUpdatingLocation()
+                return call.reject(
+                    "Permission denied.",
+                    "NOT_AUTHORIZED"
+                )
             }
         }
+        return call.reject(error.localizedDescription, nil, error)
     }
 
     public func locationManager(
         _ manager: CLLocationManager,
         didUpdateLocations locations: [CLLocation]
     ) {
-        if let location = locations.last {
-            if let watcher = self.watchers.first(
-                where: { $0.locationManager == manager }
-            ) {
-                if watcher.isLocationValid(location) {
-                    if let call = self.bridge?.savedCall(withID: watcher.callbackId) {
-                        return call.resolve(formatLocation(location))
-                    }
-                }
-            }
+        guard let location = locations.last,
+              let callbackId = activeCallbackId,
+              let call = self.bridge?.savedCall(withID: callbackId) else {
+            return
+        }
+
+        if isLocationValid(location) {
+            return call.resolve(formatLocation(location))
         }
     }
 
@@ -220,11 +219,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
         // it is on iOS 14 when the permissions dialog is presented, we ignore
         // it.
         if status != .notDetermined {
-            if let watcher = self.watchers.first(
-                where: { $0.locationManager == manager }
-            ) {
-                return watcher.start()
-            }
+            startUpdatingLocation()
         }
     }
 }

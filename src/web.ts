@@ -2,7 +2,7 @@ import { WebPlugin } from "@capacitor/core";
 
 import type {
   BackgroundGeolocationPlugin,
-  WatcherOptions,
+  StartOptions,
   Location,
   CallbackError,
 } from "./definitions";
@@ -11,31 +11,31 @@ export class BackgroundGeolocationWeb
   extends WebPlugin
   implements BackgroundGeolocationPlugin
 {
-  private watchers = new Map<
-    string,
-    {
-      watchId: number;
-      callback: (position?: Location, error?: CallbackError) => void;
-    }
-  >();
-  private watcherCounter = 0;
+  private watchId: number | undefined;
 
-  async addWatcher(
-    options: WatcherOptions,
+  async start(
+    options: StartOptions,
     callback: (position?: Location, error?: CallbackError) => void,
-  ): Promise<string> {
-    const watcherId = `watcher_${++this.watcherCounter}`;
-
+  ): Promise<void> {
     if (!navigator.geolocation) {
       callback(undefined, {
         name: "GeolocationError",
         message: "Geolocation is not supported by this browser",
         code: "NOT_SUPPORTED",
       });
-      return watcherId;
+      return;
     }
 
-    const watchId = navigator.geolocation.watchPosition(
+    if (this.watchId) {
+      callback(undefined, {
+        name: "GeolocationError",
+        message: "Geolocation already started",
+        code: "ALREADY_STARTED",
+      });
+      return;
+    }
+
+    this.watchId = navigator.geolocation.watchPosition(
       (position) => {
         const location: Location = {
           latitude: position.coords.latitude,
@@ -64,16 +64,12 @@ export class BackgroundGeolocationWeb
         maximumAge: options.stale ? 300000 : 0,
       },
     );
-
-    this.watchers.set(watcherId, { watchId, callback });
-    return watcherId;
   }
 
-  async removeWatcher(options: { id: string }): Promise<void> {
-    const watcher = this.watchers.get(options.id);
-    if (watcher) {
-      navigator.geolocation.clearWatch(watcher.watchId);
-      this.watchers.delete(options.id);
+  async stop(): Promise<void> {
+    if (this.watchId) {
+      navigator.geolocation.clearWatch(this.watchId);
+      delete this.watchId;
     }
   }
 
