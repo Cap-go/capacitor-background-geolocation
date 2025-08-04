@@ -83,6 +83,8 @@ public class BackgroundGeolocationService extends Service {
       final String notificationMessage,
       float distanceFilter
     ) {
+      releaseMediaPlayer();
+      mediaPlayer = new MediaPlayer();
       client = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
       callbackId = id;
 
@@ -131,15 +133,15 @@ public class BackgroundGeolocationService extends Service {
       client.removeUpdates(locationCallback);
       stopForeground(true);
       stopSelf();
+      releaseMediaPlayer();
       return callbackId;
     }
 
     void playSound(String filePath) {
       try {
-        releaseMediaPlayer();
-
-        mediaPlayer = new MediaPlayer();
-
+        if (mediaPlayer == null) {
+          mediaPlayer = new MediaPlayer();
+        }
         AssetManager am = getApplicationContext().getResources().getAssets();
         AssetFileDescriptor assetFileDescriptor = am.openFd(
           "public/" + filePath
@@ -152,15 +154,6 @@ public class BackgroundGeolocationService extends Service {
         );
         mediaPlayer.setLooping(false);
 
-        mediaPlayer.setOnCompletionListener(mp -> {
-          try {
-            mp.release();
-          } catch (Exception e) {
-            Logger.error("Error releasing MediaPlayer on completion", e);
-          }
-          mediaPlayer = null;
-        });
-
         mediaPlayer.setOnErrorListener((mp, what, extra) -> {
           Logger.error("MediaPlayer error: what=" + what + ", extra=" + extra);
           releaseMediaPlayer();
@@ -171,7 +164,6 @@ public class BackgroundGeolocationService extends Service {
         mediaPlayer.setOnPreparedListener(mp -> {
           try {
             mp.start();
-            Logger.debug("PlaySound: Successfully started playing sound");
           } catch (Exception e) {
             Logger.error("Error starting MediaPlayer", e);
             releaseMediaPlayer();
