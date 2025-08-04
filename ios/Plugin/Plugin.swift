@@ -2,6 +2,7 @@ import Capacitor
 import Foundation
 import UIKit
 import CoreLocation
+import AVFoundation
 
 // Avoids a bewildering type warning.
 let null = Optional<Double>.none as Any
@@ -40,6 +41,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
     private var allowStale: Bool = false
     private var isUpdatingLocation: Bool = false
     private var activeCallbackId: String?
+    private var audioPlayer: AVAudioPlayer?
 
     @objc override public func load() {
         UIDevice.current.isBatteryMonitoringEnabled = true
@@ -169,6 +171,29 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
             allowStale ||
                 location.timestamp >= created
         )
+    }
+    
+    @objc func playSound(_ call: CAPPluginCall) {
+        // Use a background queue for audio loading to avoid blocking the main thread
+        DispatchQueue.global(qos: .background).async { [weak self] in
+            guard let self = self else { return }
+            
+            let assetPath = "public/" + (call.getString("soundFile") ?? "");
+            let assetPathSplit = assetPath.components(separatedBy: ".")
+            guard let url = Bundle.main.url(forResource: assetPathSplit[0], withExtension: assetPathSplit[1]) else {
+                call.reject("Sound file not found: \(assetPath)")
+                return
+            }
+            
+            do {
+                // Initialize the audio player
+                self.audioPlayer = try AVAudioPlayer(contentsOf: url)
+                // Play the sound
+                self.audioPlayer?.play()
+            } catch {
+                call.reject("Could not play the sound file: \(error.localizedDescription)")
+            }
+        }
     }
 
     public func locationManager(
