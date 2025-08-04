@@ -43,7 +43,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
     private var activeCallbackId: String?
     private var audioPlayer: AVAudioPlayer?
     private var plannedRoute: [[Double]] = []
-    private var isOffRoute: Bool = false
+    private var isOffRoute: Bool = true
     private var distanceThreshold: Double = 50.0 // Default distance threshold in meters
 
     // Earth radius in meters for distance calculations
