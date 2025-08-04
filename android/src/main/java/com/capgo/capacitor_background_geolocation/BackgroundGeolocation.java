@@ -15,7 +15,9 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
 import android.provider.Settings;
+import androidx.annotation.Nullable;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Logger;
 import com.getcapacitor.PermissionState;
@@ -27,6 +29,8 @@ import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
 import com.google.android.gms.location.LocationServices;
 import java.util.concurrent.CompletableFuture;
+import org.json.JSONArray;
+import org.json.JSONException;
 import org.json.JSONObject;
 
 @CapacitorPlugin(
@@ -189,7 +193,7 @@ public class BackgroundGeolocation extends Plugin {
   }
 
   @PluginMethod
-  public void playSound(PluginCall call) {
+  public void setPlannedRoute(PluginCall call) {
     String soundFile = call.getString("soundFile");
     if (soundFile == null || soundFile.isEmpty()) {
       call.reject("Sound file is required");
@@ -202,15 +206,48 @@ public class BackgroundGeolocation extends Plugin {
       );
       return;
     }
-    serviceConnectionFuture
-      .thenAccept(service -> {
-        service.playSound(soundFile);
-        call.resolve();
-      })
-      .exceptionally(throwable -> {
-        call.reject("Failed to play sound: " + throwable.getMessage());
-        return null;
-      });
+    try {
+      double[][] javaDoubleArray = getJavaDoubleArray(call.getArray("route"));
+      serviceConnectionFuture
+        .thenAccept(service -> {
+          service.setPlannedRoute(
+            soundFile,
+            javaDoubleArray,
+            call.getFloat("distance", 50f)
+          );
+          call.resolve();
+        })
+        .exceptionally(throwable -> {
+          call.reject("Failed to set route: " + throwable.getMessage());
+          return null;
+        });
+    } catch (Exception ex) {
+      call.reject("Unable to parse route parameters");
+    }
+  }
+
+  private static double[][] getJavaDoubleArray(JSArray jsArray)
+    throws JSONException {
+    int rows = jsArray.length();
+    if (rows == 0) {
+      return new double[0][2];
+    }
+
+    JSONArray firstRow = jsArray.getJSONArray(0);
+    int cols = firstRow.length();
+
+    var javaDoubleArray = new double[rows][cols];
+
+    for (int i = 0; i < rows; i++) {
+      JSONArray rowArray = jsArray.getJSONArray(i);
+      if (rowArray.length() != cols) {
+        throw new JSONException("Input array is not a consistent 2D array.");
+      }
+      for (int j = 0; j < cols; j++) {
+        javaDoubleArray[i][j] = rowArray.getDouble(j);
+      }
+    }
+    return javaDoubleArray;
   }
 
   // Checks if device-wide location services are disabled
