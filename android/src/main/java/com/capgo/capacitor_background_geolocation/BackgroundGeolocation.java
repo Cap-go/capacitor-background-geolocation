@@ -196,13 +196,18 @@ public class BackgroundGeolocation extends Plugin {
       return;
     }
     if (serviceConnectionFuture == null) {
-      call.reject("Service not started, make sure to call start() first", "NOT_STARTED");
+      call.reject(
+        "Service not started, make sure to call start() first",
+        "NOT_STARTED"
+      );
       return;
     }
-    serviceConnectionFuture.thenAccept(service -> {
+    serviceConnectionFuture
+      .thenAccept(service -> {
         service.playSound(soundFile);
         call.resolve();
-      }).exceptionally(throwable -> {
+      })
+      .exceptionally(throwable -> {
         call.reject("Failed to play sound: " + throwable.getMessage());
         return null;
       });

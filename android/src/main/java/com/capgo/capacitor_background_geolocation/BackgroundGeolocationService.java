@@ -141,12 +141,14 @@ public class BackgroundGeolocationService extends Service {
         mediaPlayer = new MediaPlayer();
 
         AssetManager am = getApplicationContext().getResources().getAssets();
-        AssetFileDescriptor assetFileDescriptor = am.openFd("public/" + filePath);
+        AssetFileDescriptor assetFileDescriptor = am.openFd(
+          "public/" + filePath
+        );
 
         mediaPlayer.setDataSource(
-                assetFileDescriptor.getFileDescriptor(),
-                assetFileDescriptor.getStartOffset(),
-                assetFileDescriptor.getLength()
+          assetFileDescriptor.getFileDescriptor(),
+          assetFileDescriptor.getStartOffset(),
+          assetFileDescriptor.getLength()
         );
         mediaPlayer.setLooping(false);
 
