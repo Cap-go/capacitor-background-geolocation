@@ -242,9 +242,10 @@ playSound(options: PlaySoundOptions) => Promise<void>
 ```
 
 Plays a sound file.
-This should be used to play a sound in the background too when listening for location updates.
+This should be used to play a sound, in the background too.
 The idea behind this is to allow the user to hear a sound when a new location is available or when going off track.
 If you simply need to play a sound, you can use `@capgo/native-audio` plugin instead.
+For Android, there's a need to start monitoring location updates first, otherwise the sound will not play.
 
 | Param         | Type                                                          | Description                       |
 | ------------- | ------------------------------------------------------------- | --------------------------------- |
