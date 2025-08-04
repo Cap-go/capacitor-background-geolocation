@@ -244,7 +244,7 @@ setPlannedRoute(options: SetPlannedRouteOptions) => Promise<void>
 ```
 
 Plays a sound file when the user deviates from the planned route.
-This should be used to play a sound, in the background too (only for native).
+This should be used to play a sound (in the background too, only for native).
 
 | Param         | Type                                                                      | Description                                              |
 | ------------- | ------------------------------------------------------------------------- | -------------------------------------------------------- |
