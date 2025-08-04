@@ -176,6 +176,7 @@ Configration specific to Android can be made in `strings.xml`:
 * [`start(...)`](#start)
 * [`stop()`](#stop)
 * [`openSettings()`](#opensettings)
+* [`playSound(...)`](#playsound)
 * [Interfaces](#interfaces)
 
 </docgen-index>
@@ -233,6 +234,26 @@ Useful for directing users to enable location services or adjust permissions.
 --------------------
 
 
+### playSound(...)
+
+```typescript
+playSound(options: PlaySoundOptions) => Promise<void>
+```
+
+Plays a sound file.
+This should be used to play a sound in the background too when listening for location updates.
+The idea behind this is to allow the user to hear a sound when a new location is available or when going off track.
+If you simply need to play a sound, you can use `@capgo/native-audio` plugin instead.
+
+| Param         | Type                                                          | Description                       |
+| ------------- | ------------------------------------------------------------- | --------------------------------- |
+| **`options`** | <code><a href="#playsoundoptions">PlaySoundOptions</a></code> | The options for playing the sound |
+
+**Since:** 7.0.10
+
+--------------------
+
+
 ### Interfaces
 
 
@@ -275,5 +296,12 @@ Extends the standard Error with optional error codes.
 | Prop       | Type                | Description                                           | Since |
 | ---------- | ------------------- | ----------------------------------------------------- | ----- |
 | **`code`** | <code>string</code> | Optional error code for more specific error handling. | 7.0.0 |
+
+
+#### PlaySoundOptions
+
+| Prop            | Type                | Description                                                                                                                                                                                             | Since  |
+| --------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| **`soundFile`** | <code>string</code> | The name of the sound file to play. Must be a valid sound relative path in the app's public folder to work for both web and native platforms. There's no need to include the public folder in the path. | 7.0.10 |
 
 </docgen-api>

@@ -188,6 +188,26 @@ public class BackgroundGeolocation extends Plugin {
     call.resolve();
   }
 
+  @PluginMethod
+  public void playSound(PluginCall call) {
+    String soundFile = call.getString("soundFile");
+    if (soundFile == null || soundFile.isEmpty()) {
+      call.reject("Sound file is required");
+      return;
+    }
+    if (serviceConnectionFuture == null) {
+      call.reject("Service not started, make sure to call start() first", "NOT_STARTED");
+      return;
+    }
+    serviceConnectionFuture.thenAccept(service -> {
+        service.playSound(soundFile);
+        call.resolve();
+      }).exceptionally(throwable -> {
+        call.reject("Failed to play sound: " + throwable.getMessage());
+        return null;
+      });
+  }
+
   // Checks if device-wide location services are disabled
   private static Boolean isLocationEnabled(Context context) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {

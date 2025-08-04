@@ -5,9 +5,12 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.res.AssetFileDescriptor;
+import android.content.res.AssetManager;
 import android.graphics.Color;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.media.MediaPlayer;
 import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
@@ -30,6 +33,7 @@ public class BackgroundGeolocationService extends Service {
 
   private LocationManager client;
   private LocationListener locationCallback;
+  private MediaPlayer mediaPlayer;
 
   @Override
   public IBinder onBind(Intent intent) {
@@ -43,8 +47,31 @@ public class BackgroundGeolocationService extends Service {
   @Override
   public boolean onUnbind(Intent intent) {
     client.removeUpdates(locationCallback);
+    releaseMediaPlayer();
     stopSelf();
     return false;
+  }
+
+  @Override
+  public void onDestroy() {
+    client.removeUpdates(locationCallback);
+    super.onDestroy();
+    releaseMediaPlayer();
+  }
+
+  private void releaseMediaPlayer() {
+    if (mediaPlayer == null) {
+      return;
+    }
+    try {
+      if (mediaPlayer.isPlaying()) {
+        mediaPlayer.stop();
+      }
+      mediaPlayer.release();
+    } catch (Exception e) {
+      Logger.error("Error releasing MediaPlayer", e);
+    }
+    mediaPlayer = null;
   }
 
   // Handles requests from the activity.
@@ -105,6 +132,53 @@ public class BackgroundGeolocationService extends Service {
       stopForeground(true);
       stopSelf();
       return callbackId;
+    }
+
+    void playSound(String filePath) {
+      try {
+        releaseMediaPlayer();
+
+        mediaPlayer = new MediaPlayer();
+
+        AssetManager am = getApplicationContext().getResources().getAssets();
+        AssetFileDescriptor assetFileDescriptor = am.openFd("public/" + filePath);
+
+        mediaPlayer.setDataSource(
+                assetFileDescriptor.getFileDescriptor(),
+                assetFileDescriptor.getStartOffset(),
+                assetFileDescriptor.getLength()
+        );
+        mediaPlayer.setLooping(false);
+
+        mediaPlayer.setOnCompletionListener(mp -> {
+          try {
+            mp.release();
+          } catch (Exception e) {
+            Logger.error("Error releasing MediaPlayer on completion", e);
+          }
+          mediaPlayer = null;
+        });
+
+        mediaPlayer.setOnErrorListener((mp, what, extra) -> {
+          Logger.error("MediaPlayer error: what=" + what + ", extra=" + extra);
+          releaseMediaPlayer();
+          return true; // Indicate we handled the error
+        });
+
+        mediaPlayer.prepareAsync();
+        mediaPlayer.setOnPreparedListener(mp -> {
+          try {
+            mp.start();
+            Logger.debug("PlaySound: Successfully started playing sound");
+          } catch (Exception e) {
+            Logger.error("Error starting MediaPlayer", e);
+            releaseMediaPlayer();
+          }
+        });
+      } catch (Exception e) {
+        Logger.error("PlaySound: Unexpected error", e);
+        releaseMediaPlayer();
+      }
     }
   }
 

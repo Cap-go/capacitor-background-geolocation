@@ -165,6 +165,17 @@ export interface CallbackError extends Error {
   code?: string;
 }
 
+export interface PlaySoundOptions {
+  /**
+   * The name of the sound file to play.
+   * Must be a valid sound relative path in the app's public folder to work for both web and native platforms.
+   * There's no need to include the public folder in the path.
+   * @since 7.0.10
+   * @example "notification.mp3"
+   * */
+  soundFile: string;
+}
+
 /**
  * Main plugin interface for background geolocation functionality.
  * Provides methods to manage location updates and access device settings.
@@ -230,4 +241,21 @@ export interface BackgroundGeolocationPlugin {
    * await BackgroundGeolocation.openSettings();
    */
   openSettings(): Promise<void>;
+
+  /**
+   * Plays a sound file.
+   * This should be used to play a sound in the background too when listening for location updates.
+   * The idea behind this is to allow the user to hear a sound when a new location is available or when going off track.
+   * If you simply need to play a sound, you can use `@capgo/native-audio` plugin instead.
+   *
+   * @param options The options for playing the sound
+   * @returns A promise that resolves when the sound is successfully played
+   *
+   * @since 7.0.10
+   * @example
+   * await BackgroundGeolocation.playSound({
+   *   soundFile: "notification.mp3"
+   * });
+   */
+  playSound(options: PlaySoundOptions): Promise<void>;
 }
