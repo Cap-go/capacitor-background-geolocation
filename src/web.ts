@@ -101,6 +101,11 @@ export class BackgroundGeolocationWeb
     if (!options.soundFile) {
       throw new Error("Sound file is required");
     }
+    if (this.audio) {
+      this.audio.pause();
+      this.audio.src = '';
+      this.audio = undefined;
+    }
     this.audio = new Audio(options.soundFile);
     this.plannedRoute = options.route || [];
     this.distanceThreshold = options.distance || 50;
