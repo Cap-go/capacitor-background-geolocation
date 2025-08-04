@@ -186,10 +186,11 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
             }
 
             do {
-                // Initialize the audio player
+                self.audioPlayer?.stop()
+                self.audioPlayer = nil
                 self.audioPlayer = try AVAudioPlayer(contentsOf: url)
-                // Play the sound
                 self.audioPlayer?.play()
+                call.resolve()
             } catch {
                 call.reject("Could not play the sound file: \(error.localizedDescription)")
             }
