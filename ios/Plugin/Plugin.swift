@@ -159,14 +159,12 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
         DispatchQueue.global(qos: .background).async { [weak self] in
             guard let self = self else { return }
 
-            // Get the sound file path
             guard let soundFile = call.getString("soundFile") else {
                 call.reject("Sound file is required")
                 return
             }
 
-            // Get the route array
-            let routeArray = call.getArray("route", JSObject.self) ?? []
+            let routeArray = call.getArray("route", Any.self) ?? []
             var route: [[Double]] = []
 
             for routePoint in routeArray {
@@ -175,10 +173,8 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate {
                 }
             }
 
-            // Get distance threshold
             let distance = call.getDouble("distance") ?? 50.0
 
-            // Set up audio player
             let assetPath = "public/" + soundFile
             let assetPathSplit = assetPath.components(separatedBy: ".")
             guard let url = Bundle.main.url(forResource: assetPathSplit[0], withExtension: assetPathSplit[1]) else {
