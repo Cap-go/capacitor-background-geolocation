@@ -173,6 +173,7 @@ Configration specific to Android can be made in `strings.xml`:
 
 ```
 
+## API
 
 <docgen-index>
 
