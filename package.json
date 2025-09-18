@@ -1,7 +1,7 @@
 {
     "name": "@capgo/background-geolocation",
     "version": "7.0.17",
-    "description": "Receive geolocation updates even while the app is in the background.",
+    "description": "Receive accurate geolocation updates even while the app is in the background.",
     "main": "dist/plugin.cjs.js",
     "module": "dist/esm/index.js",
     "types": "dist/esm/index.d.ts",
@@ -10,7 +10,8 @@
         "android/src/main/",
         "android/build.gradle",
         "dist/",
-        "ios/Plugin/",
+        "ios/Sources",
+        "ios/Tests",
         "Package.swift",
         "CapgoBackgroundGeolocation.podspec"
     ],
@@ -43,6 +44,7 @@
         "capacitor",
         "plugin",
         "native",
+        "accurate",
         "background",
         "geolocation"
     ],

@@ -6,7 +6,7 @@
   <h2><a href="https://capgo.app/consulting/?ref=plugin"> Missing a feature? We’ll build the plugin for you 💪</a></h2>
 </div>
 
-A Capacitor plugin that lets you receive geolocation updates even while the app is backgrounded.
+A Capacitor plugin that lets you receive accurate geolocation updates even while the app is backgrounded.
 It has a web API to facilitate for a similar usage, but background geolocation is not supported in a regular browser, only in an app environment.
 
 ## This plugin's history
