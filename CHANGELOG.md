@@ -2,6 +2,8 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.0.17](https://github.com/Cap-go/capacitor-background-geolocation/compare/7.0.16...7.0.17) (2025-09-18)
+
 ## [7.0.16](https://github.com/Cap-go/capacitor-background-geolocation/compare/7.0.14...7.0.16) (2025-09-18)
 
 ## [7.0.15](https://github.com/Cap-go/capacitor-background-geolocation/compare/7.0.14...7.0.15) (2025-09-18)
