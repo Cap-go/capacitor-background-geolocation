@@ -61,7 +61,7 @@ public class BackgroundGeolocationService extends Service {
 
   @Override
   public void onDestroy() {
-    if (client != null) {
+    if (client != null && locationCallback != null) {
       client.removeUpdates(locationCallback);
     }
     super.onDestroy();
