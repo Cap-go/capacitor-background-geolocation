@@ -1,4 +1,4 @@
-import { WebPlugin } from "@capacitor/core";
+import { WebPlugin } from '@capacitor/core';
 
 import type {
   BackgroundGeolocationPlugin,
@@ -6,12 +6,9 @@ import type {
   Location,
   CallbackError,
   SetPlannedRouteOptions,
-} from "./definitions";
+} from './definitions';
 
-export class BackgroundGeolocationWeb
-  extends WebPlugin
-  implements BackgroundGeolocationPlugin
-{
+export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeolocationPlugin {
   private static readonly EARTH_RADIUS_M = 6371000;
 
   private watchId: number | undefined;
@@ -20,24 +17,21 @@ export class BackgroundGeolocationWeb
   private isOffRoute = true;
   private distanceThreshold = 50;
 
-  async start(
-    options: StartOptions,
-    callback: (position?: Location, error?: CallbackError) => void,
-  ): Promise<void> {
+  async start(options: StartOptions, callback: (position?: Location, error?: CallbackError) => void): Promise<void> {
     if (!navigator.geolocation) {
       callback(undefined, {
-        name: "GeolocationError",
-        message: "Geolocation is not supported by this browser",
-        code: "NOT_SUPPORTED",
+        name: 'GeolocationError',
+        message: 'Geolocation is not supported by this browser',
+        code: 'NOT_SUPPORTED',
       });
       return;
     }
 
     if (this.watchId) {
       callback(undefined, {
-        name: "GeolocationError",
-        message: "Geolocation already started",
-        code: "ALREADY_STARTED",
+        name: 'GeolocationError',
+        message: 'Geolocation already started',
+        code: 'ALREADY_STARTED',
       });
       return;
     }
@@ -56,12 +50,8 @@ export class BackgroundGeolocationWeb
           time: position.timestamp,
         };
         if (this.audio && this.plannedRoute.length > 0) {
-          const currentPoint: [number, number] = [
-            position.coords.longitude,
-            position.coords.latitude,
-          ];
-          const offRoute =
-            this.distancePointToRoute(currentPoint) > this.distanceThreshold;
+          const currentPoint: [number, number] = [position.coords.longitude, position.coords.latitude];
+          const offRoute = this.distancePointToRoute(currentPoint) > this.distanceThreshold;
           if (offRoute == true && this.isOffRoute === false) {
             this.audio.play();
           }
@@ -71,7 +61,7 @@ export class BackgroundGeolocationWeb
       },
       (error) => {
         const callbackError: CallbackError = {
-          name: "GeolocationError",
+          name: 'GeolocationError',
           message: error.message,
           code: error.code.toString(),
         };
@@ -93,17 +83,17 @@ export class BackgroundGeolocationWeb
   }
 
   async openSettings(): Promise<void> {
-    console.log("openSettings: Web implementation cannot open native settings");
-    window.alert("Please enable location permissions in your browser settings");
+    console.log('openSettings: Web implementation cannot open native settings');
+    window.alert('Please enable location permissions in your browser settings');
   }
 
   async setPlannedRoute(options: SetPlannedRouteOptions): Promise<void> {
     if (!options.soundFile) {
-      throw new Error("Sound file is required");
+      throw new Error('Sound file is required');
     }
     if (this.audio) {
       this.audio.pause();
-      this.audio.src = "";
+      this.audio.src = '';
       this.audio = undefined;
     }
     this.audio = new Audio(options.soundFile);
@@ -115,10 +105,7 @@ export class BackgroundGeolocationWeb
     return (degrees * Math.PI) / 180;
   }
 
-  private haversine(
-    point1: [number, number],
-    point2: [number, number],
-  ): number {
+  private haversine(point1: [number, number], point2: [number, number]): number {
     const [lon1, lat1] = point1;
     const [lon2, lat2] = point2;
     const dLat = this.toRadians(lat2 - lat1);
@@ -126,10 +113,7 @@ export class BackgroundGeolocationWeb
 
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(this.toRadians(lat1)) *
-        Math.cos(this.toRadians(lat2)) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+      Math.cos(this.toRadians(lat1)) * Math.cos(this.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
 
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
@@ -157,17 +141,13 @@ export class BackgroundGeolocationWeb
 
     // Angle at B (lineStart)
     // Use a small epsilon to handle floating point inaccuracies in division by zero
-    const cos_B =
-      (dist_A_B ** 2 + dist_B_C ** 2 - dist_A_C ** 2) /
-      (2 * dist_A_B * dist_B_C + Number.EPSILON);
+    const cos_B = (dist_A_B ** 2 + dist_B_C ** 2 - dist_A_C ** 2) / (2 * dist_A_B * dist_B_C + Number.EPSILON);
     if (cos_B < 0) {
       return dist_A_B;
     }
 
     // Angle at C (lineEnd)
-    const cos_C =
-      (dist_A_C ** 2 + dist_B_C ** 2 - dist_A_B ** 2) /
-      (2 * dist_A_C * dist_B_C + Number.EPSILON);
+    const cos_C = (dist_A_C ** 2 + dist_B_C ** 2 - dist_A_B ** 2) / (2 * dist_A_C * dist_B_C + Number.EPSILON);
     if (cos_C < 0) {
       return dist_A_C;
     }
@@ -179,9 +159,7 @@ export class BackgroundGeolocationWeb
     const s = (dist_A_B + dist_A_C + dist_B_C) / 2;
 
     // 2. Calculate the area using Heron's formula
-    const area = Math.sqrt(
-      Math.max(0, s * (s - dist_A_B) * (s - dist_A_C) * (s - dist_B_C)),
-    );
+    const area = Math.sqrt(Math.max(0, s * (s - dist_A_B) * (s - dist_A_C) * (s - dist_B_C)));
 
     // 3. The distance is the height of the triangle from point A to the base BC
     // Area = 0.5 * base * height  =>  height = 2 * Area / base
@@ -202,11 +180,7 @@ export class BackgroundGeolocationWeb
     for (let i = 0; i < this.plannedRoute.length - 1; i++) {
       const lineStart = this.plannedRoute[i];
       const lineEnd = this.plannedRoute[i + 1];
-      const distance = this.distancePointToLineSegment(
-        point,
-        lineStart,
-        lineEnd,
-      );
+      const distance = this.distancePointToLineSegment(point, lineStart, lineEnd);
       if (distance < minDistance) {
         minDistance = distance;
       }

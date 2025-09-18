@@ -232,10 +232,7 @@ export interface BackgroundGeolocationPlugin {
    *   }
    * );
    */
-  start(
-    options: StartOptions,
-    callback: (position?: Location, error?: CallbackError) => void,
-  ): Promise<void>;
+  start(options: StartOptions, callback: (position?: Location, error?: CallbackError) => void): Promise<void>;
 
   /**
    * Stops location updates.
