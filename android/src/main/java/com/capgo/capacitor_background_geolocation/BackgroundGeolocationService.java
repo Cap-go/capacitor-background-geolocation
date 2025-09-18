@@ -51,7 +51,9 @@ public class BackgroundGeolocationService extends Service {
   // service is terminated immediately.
   @Override
   public boolean onUnbind(Intent intent) {
-    client.removeUpdates(locationCallback);
+    if (client != null && locationCallback != null) {
+      client.removeUpdates(locationCallback);
+    }
     releaseMediaPlayer();
     stopSelf();
     return false;
@@ -59,7 +61,9 @@ public class BackgroundGeolocationService extends Service {
 
   @Override
   public void onDestroy() {
-    client.removeUpdates(locationCallback);
+    if (client != null && locationCallback != null) {
+      client.removeUpdates(locationCallback);
+    }
     super.onDestroy();
     releaseMediaPlayer();
   }
