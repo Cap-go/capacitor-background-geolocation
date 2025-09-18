@@ -28,6 +28,22 @@ That's how I ended up maintaining this one.
 I hope you'll enjoy it!
 
 
+## Plugin comparison
+
+A short comparison between the three main background-geolocation plugins commonly used in Capacitor apps.
+
+| Plugin | Accuracy | Background | HTTP Upload | Pricing |
+|--------|----------|------------|-------------|---------|
+| `@capacitor-community/background-geolocation` (Community) | Not accurate | Yes | No | Free |
+| `@capgo/background-geolocation` (this plugin) | Accurate | Yes | No | Free |
+| Transistorsoft (original) | Accurate | Yes | Yes — built-in HTTP uploader to your API | Paid |
+
+Notes:
+- The Community plugin is lightweight and continues to work in the background, but it is known to be less accurate than the options below.
+- This Cap-go plugin aims to provide accurate location fixes and reliable background operation without requiring a paid license.
+- Transistorsoft's plugin is a mature, accurate solution that also includes an HTTP uploader (it can send location updates to your API). It is a commercial product and requires a paid license for full use.
+
+
 ## Usage
 
 ```javascript
