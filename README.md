@@ -11,7 +11,7 @@ It has a web API to facilitate for a similar usage, but background geolocation i
 
 ## This plugin's history
 
-Interestingly enough, this plugin has a lot of history. The initial solution from [Transistorsoft](https://github.com/transistorsoft) was a great piece of software, and I encourage using it if it fits your needs.  
+Interestingly enough, this plugin has a lot of history. The initial solution from [Transistorsoft](https://github.com/transistorsoft) was a great piece of software, and I ([HarelM](https://github.com/HarelM))encourage using it if it fits your needs.  
 I tried it and understood that it prioritizes battery life over accuracy, which wasn't the right fit for my hiking app.  
 There was a very good fork maintained by **mauron85** specifically for that use case, and I was happy to help maintain it.  
 But at some point, **mauron85** stopped responding to messages on GitHub, and no one could continue maintaining it.  
