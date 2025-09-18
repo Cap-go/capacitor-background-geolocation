@@ -19,7 +19,7 @@ let package = Package(
                 .product(name: "Capacitor", package: "capacitor-swift-pm"),
                 .product(name: "Cordova", package: "capacitor-swift-pm")
             ],
-            path: "ios/Sources/CapgoBackgroundGeolocation"),
+            path: "ios/Sources/CapgoBackgroundGeolocationPlugin"),
         .testTarget(
             name: "CapgoBackgroundGeolocationPluginTests",
             dependencies: ["CapgoBackgroundGeolocationPlugin"],
