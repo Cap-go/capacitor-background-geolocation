@@ -1,5 +1,5 @@
 {
-  "appId": "com.capgo.capacitor_background_geolocation_example",
+  "appId": "app.capgo.background.geolocation",
   "appName": "example",
   "android": {"useLegacyBridge": true},
   "npmClient": "npm",
