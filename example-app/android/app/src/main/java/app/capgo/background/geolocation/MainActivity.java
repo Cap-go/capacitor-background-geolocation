@@ -1,4 +1,4 @@
-package com.capgo.capacitor_background_geolocation_example;
+package app.capgo.background.geolocation;
 
 import com.getcapacitor.BridgeActivity;
 

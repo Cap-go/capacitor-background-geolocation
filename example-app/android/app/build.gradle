@@ -1,7 +1,7 @@
 apply plugin: 'com.android.application'
 
 android {
-    namespace "com.capgo.capacitor_background_geolocation_example"
+    namespace "app.capgo.background.geolocation"
     compileSdk rootProject.ext.compileSdkVersion
     defaultConfig {
         applicationId "app.capgo.background.geolocation"
