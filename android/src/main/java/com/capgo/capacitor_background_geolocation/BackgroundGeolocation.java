@@ -98,13 +98,13 @@ public class BackgroundGeolocation extends Plugin {
             fetchLastLocation(call);
         }
         getServiceConnection().thenAccept((serviceBinder) -> {
-                serviceBinder.start(
-                    call.getCallbackId(),
-                    call.getString("backgroundTitle", "Using your location"),
-                    call.getString("backgroundMessage", ""),
-                    call.getFloat("distanceFilter", 0f)
-                );
-            });
+            serviceBinder.start(
+                call.getCallbackId(),
+                call.getString("backgroundTitle", "Using your location"),
+                call.getString("backgroundMessage", ""),
+                call.getFloat("distanceFilter", 0f)
+            );
+        });
     }
 
     private CompletableFuture<Void> requestLocationPermissions(PluginCall call) {
@@ -317,20 +317,20 @@ public class BackgroundGeolocation extends Plugin {
         }
 
         this.getContext().bindService(
-                serviceIntent,
-                new ServiceConnection() {
-                    @Override
-                    public void onServiceConnected(ComponentName name, IBinder binder) {
-                        serviceConnectionFuture.complete((BackgroundGeolocationService.LocalBinder) binder);
-                    }
+            serviceIntent,
+            new ServiceConnection() {
+                @Override
+                public void onServiceConnected(ComponentName name, IBinder binder) {
+                    serviceConnectionFuture.complete((BackgroundGeolocationService.LocalBinder) binder);
+                }
 
-                    @Override
-                    public void onServiceDisconnected(ComponentName name) {
-                        serviceConnectionFuture = null;
-                    }
-                },
-                Context.BIND_AUTO_CREATE
-            );
+                @Override
+                public void onServiceDisconnected(ComponentName name) {
+                    serviceConnectionFuture = null;
+                }
+            },
+            Context.BIND_AUTO_CREATE
+        );
 
         return serviceConnectionFuture;
     }
