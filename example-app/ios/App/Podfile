@@ -12,14 +12,12 @@ def capacitor_pods
   pod 'Capacitor', :path => '../../node_modules/@capacitor/ios'
   pod 'CapacitorCordova', :path => '../../node_modules/@capacitor/ios'
   pod 'CapgoBackgroundGeolocation', :path => '../../..'
-  pod 'CapacitorLocalNotifications', :path => '../../node_modules/@capacitor/local-notifications'
 end
 
 target 'App' do
   capacitor_pods
   # Add your Pods here
 end
-
 
 post_install do |installer|
   assertDeploymentTarget(installer)
