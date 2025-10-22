@@ -36,8 +36,8 @@ func formatLocation(_ location: CLLocation) -> PluginCallResultData {
 
 @objc(BackgroundGeolocation)
 public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBridgedPlugin {
-    public let identifier = "CapgoBackgroundGeolocationPlugin"
-    public let jsName = "CapgoBackgroundGeolocation"
+    public let identifier = "BackgroundGeolocationPlugin"
+    public let jsName = "BackgroundGeolocation"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "start", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
