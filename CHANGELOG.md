@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.1.1](https://github.com/Cap-go/capacitor-background-geolocation/compare/7.1.0...7.1.1) (2025-10-23)
+
+
+### Bug Fixes
+
+* remove footer in discord ([409ad53](https://github.com/Cap-go/capacitor-background-geolocation/commit/409ad53d9bd1ef09158957b922e846b2ab061b95))
+* update Discord webhook username to include repository name ([ec3e716](https://github.com/Cap-go/capacitor-background-geolocation/commit/ec3e716054970652d85568edd343fd9bbbc25883))
+
 ## [7.1.0](https://github.com/Cap-go/capacitor-background-geolocation/compare/7.0.20...7.1.0) (2025-10-23)
 
 
