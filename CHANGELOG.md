@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.1.0](https://github.com/Cap-go/capacitor-background-geolocation/compare/7.0.20...7.1.0) (2025-10-23)
+
+
+### Features
+
+* add getPluginVersion method to BackgroundGeolocation plugin and update workflows for changelog generation ([bd537e6](https://github.com/Cap-go/capacitor-background-geolocation/commit/bd537e6d18cabfde0dce9b9c00fb12f6fbd828a9))
+
+
+### Bug Fixes
+
+* remove content field from Discord webhook configuration ([a3d7446](https://github.com/Cap-go/capacitor-background-geolocation/commit/a3d7446b8e58bf9501cd669d7c4e47bc3070fa2e))
+
 ## [7.0.20](https://github.com/Cap-go/capacitor-background-geolocation/compare/7.0.19...7.0.20) (2025-10-22)
 
 
