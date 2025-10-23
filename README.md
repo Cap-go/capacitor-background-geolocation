@@ -197,6 +197,7 @@ Configration specific to Android can be made in `strings.xml`:
 * [`stop()`](#stop)
 * [`openSettings()`](#opensettings)
 * [`setPlannedRoute(...)`](#setplannedroute)
+* [`getPluginVersion()`](#getpluginversion)
 * [Interfaces](#interfaces)
 
 </docgen-index>
@@ -268,6 +269,19 @@ This should be used to play a sound (in the background too, only for native).
 | **`options`** | <code><a href="#setplannedrouteoptions">SetPlannedRouteOptions</a></code> | The options for setting the planned route and sound file |
 
 **Since:** 7.0.11
+
+--------------------
+
+
+### getPluginVersion()
+
+```typescript
+getPluginVersion() => Promise<{ version: string; }>
+```
+
+Get the native Capacitor plugin version
+
+**Returns:** <code>Promise&lt;{ version: string; }&gt;</code>
 
 --------------------
 
