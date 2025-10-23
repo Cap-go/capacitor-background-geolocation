@@ -188,4 +188,8 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
 
     return minDistance;
   }
+
+  async getPluginVersion(): Promise<{ version: string }> {
+    return { version: 'web' };
+  }
 }

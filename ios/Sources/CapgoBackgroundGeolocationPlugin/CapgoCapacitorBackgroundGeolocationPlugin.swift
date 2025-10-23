@@ -36,13 +36,15 @@ func formatLocation(_ location: CLLocation) -> PluginCallResultData {
 
 @objc(BackgroundGeolocation)
 public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBridgedPlugin {
+    private let PLUGIN_VERSION: String = ""
     public let identifier = "BackgroundGeolocationPlugin"
     public let jsName = "BackgroundGeolocation"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "start", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openSettings", returnType: CAPPluginReturnPromise),
-        CAPPluginMethod(name: "setPlannedRoute", returnType: CAPPluginReturnPromise)
+        CAPPluginMethod(name: "setPlannedRoute", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getPluginVersion", returnType: CAPPluginReturnPromise)
     ]
     private var locationManager: CLLocationManager?
     private var created: Date?
@@ -383,4 +385,9 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             startUpdatingLocation()
         }
     }
+
+    @objc func getPluginVersion(_ call: CAPPluginCall) {
+        call.resolve(["version": self.PLUGIN_VERSION])
+    }
+
 }
