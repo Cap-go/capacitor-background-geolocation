@@ -1,7 +1,0 @@
-{
-  "appId": "app.capgo.background.geolocation",
-  "appName": "Background Geolocation Example",
-  "android": {"useLegacyBridge": true},
-  "npmClient": "npm",
-  "webDir": "www"
-}

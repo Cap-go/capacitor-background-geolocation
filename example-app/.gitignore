@@ -1,4 +1,7 @@
-www/capacitor.js*
-www/plugin.js*
-android/app/src/main/assets
-ios/App/App/capacitor.config.json
+node_modules/
+dist/
+.DS_Store
+.idea/
+.vscode/
+*.map
+.sourcemaps
