@@ -106,6 +106,10 @@ function guessLocation(callback, timeout) {
 }
 ```
 
+## Documentation
+
+The most complete doc is available here: https://capgo.app/docs/plugins/background-geolocation/
+
 ## Installation
 
 This plugin supports Capacitor v7:
