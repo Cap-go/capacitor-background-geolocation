@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. See [commit-and-tag-version](https://github.com/absolute-version/commit-and-tag-version) for commit guidelines.
 
+## [7.2.2](https://github.com/Cap-go/capacitor-background-geolocation/compare/7.2.1...7.2.2) (2025-10-29)
+
+
+### Bug Fixes
+
+* CI/CD config ([d460c9f](https://github.com/Cap-go/capacitor-background-geolocation/commit/d460c9f120467db57b39740b96d30299ef14ffc8))
+* update AI model in build workflow ([3ac699c](https://github.com/Cap-go/capacitor-background-geolocation/commit/3ac699c18ec9a86824c38324b36f9aa5ee60a219))
+* update github action ([1059b5a](https://github.com/Cap-go/capacitor-background-geolocation/commit/1059b5a2038285f7755b9fb3688d9997f49b0d3e))
+
 ## [7.2.1](https://github.com/Cap-go/capacitor-background-geolocation/compare/7.2.0...7.2.1) (2025-10-27)
 
 
