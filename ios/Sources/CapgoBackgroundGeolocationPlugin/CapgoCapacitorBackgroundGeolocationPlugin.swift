@@ -36,7 +36,7 @@ func formatLocation(_ location: CLLocation) -> PluginCallResultData {
 
 @objc(BackgroundGeolocation)
 public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBridgedPlugin {
-    private let PLUGIN_VERSION: String = "7.2.2"
+    private let pluginVersion: String = "7.2.2"
     public let identifier = "BackgroundGeolocationPlugin"
     public let jsName = "BackgroundGeolocation"
     public let pluginMethods: [CAPPluginMethod] = [
@@ -387,7 +387,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     }
 
     @objc func getPluginVersion(_ call: CAPPluginCall) {
-        call.resolve(["version": self.PLUGIN_VERSION])
+        call.resolve(["version": self.pluginVersion])
     }
 
 }
