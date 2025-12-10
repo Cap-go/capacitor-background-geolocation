@@ -1,90 +1,90 @@
 {
-    "name": "@capgo/background-geolocation",
-    "version": "7.2.9",
-    "description": "Receive accurate geolocation updates even while the app is in the background.",
-    "main": "dist/plugin.cjs.js",
-    "module": "dist/esm/index.js",
-    "types": "dist/esm/index.d.ts",
-    "unpkg": "dist/plugin.js",
-    "files": [
-        "android/src/main/",
-        "android/build.gradle",
-        "dist/",
-        "ios/Sources",
-        "ios/Tests",
-        "Package.swift",
-        "CapgoBackgroundGeolocation.podspec"
-    ],
-    "author": "Martin Donadieu <martin@capgo.app>",
-    "license": "MPL-2.0",
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/Cap-go/capacitor-background-geolocation.git"
+  "name": "@capgo/background-geolocation",
+  "version": "8.0.0",
+  "description": "Receive accurate geolocation updates even while the app is in the background.",
+  "main": "dist/plugin.cjs.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/esm/index.d.ts",
+  "unpkg": "dist/plugin.js",
+  "files": [
+    "android/src/main/",
+    "android/build.gradle",
+    "dist/",
+    "ios/Sources",
+    "ios/Tests",
+    "Package.swift",
+    "CapgoBackgroundGeolocation.podspec"
+  ],
+  "author": "Martin Donadieu <martin@capgo.app>",
+  "license": "MPL-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Cap-go/capacitor-background-geolocation.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Cap-go/capacitor-background-geolocation/issues"
+  },
+  "scripts": {
+    "verify": "npm run verify:ios && npm run verify:android && npm run verify:web",
+    "verify:ios": "xcodebuild -scheme CapgoBackgroundGeolocation -destination generic/platform=iOS",
+    "verify:android": "cd android && ./gradlew clean build test && cd ..",
+    "verify:web": "npm run build",
+    "test": "npm run test:ios && npm run test:android",
+    "test:ios": "./scripts/test-ios.sh",
+    "test:android": "cd android && ./gradlew test && cd ..",
+    "lint": "npm run eslint && npm run prettier -- --check && npm run swiftlint -- lint",
+    "fmt": "npm run eslint -- --fix && npm run prettier -- --write && npm run swiftlint -- --fix --format",
+    "eslint": "eslint . --ext ts",
+    "prettier": "prettier \"**/*.{css,html,ts,js,java}\" --plugin=prettier-plugin-java",
+    "swiftlint": "node-swiftlint",
+    "docgen": "docgen --api BackgroundGeolocationPlugin --output-readme README.md --output-json dist/docs.json",
+    "build": "npm run clean && npm run docgen && tsc && rollup -c rollup.config.mjs",
+    "clean": "rimraf ./dist",
+    "watch": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "capacitor",
+    "plugin",
+    "native",
+    "accurate",
+    "background",
+    "geolocation"
+  ],
+  "devDependencies": {
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/cli": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
+    "@capacitor/docgen": "^0.3.1",
+    "@capacitor/ios": "^8.0.0",
+    "@ionic/eslint-config": "^0.4.0",
+    "@ionic/prettier-config": "^4.0.0",
+    "@ionic/swiftlint-config": "^2.0.0",
+    "@types/node": "^24.10.1",
+    "eslint": "^8.57.1",
+    "eslint-plugin-import": "^2.31.0",
+    "husky": "^9.1.7",
+    "prettier": "^3.6.2",
+    "prettier-plugin-java": "^2.7.7",
+    "rimraf": "^6.1.0",
+    "rollup": "^4.53.2",
+    "swiftlint": "^2.0.0",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "@capacitor/core": ">=8.0.0"
+  },
+  "prettier": "@ionic/prettier-config",
+  "swiftlint": "@ionic/swiftlint-config",
+  "eslintConfig": {
+    "extends": "@ionic/eslint-config/recommended"
+  },
+  "capacitor": {
+    "ios": {
+      "src": "ios"
     },
-    "bugs": {
-        "url": "https://github.com/Cap-go/capacitor-background-geolocation/issues"
-    },
-    "scripts": {
-        "verify": "npm run verify:ios && npm run verify:android && npm run verify:web",
-        "verify:ios": "xcodebuild -scheme CapgoBackgroundGeolocation -destination generic/platform=iOS",
-        "verify:android": "cd android && ./gradlew clean build test && cd ..",
-        "verify:web": "npm run build",
-        "test": "npm run test:ios && npm run test:android",
-        "test:ios": "./scripts/test-ios.sh",
-        "test:android": "cd android && ./gradlew test && cd ..",
-        "lint": "npm run eslint && npm run prettier -- --check && npm run swiftlint -- lint",
-        "fmt": "npm run eslint -- --fix && npm run prettier -- --write && npm run swiftlint -- --fix --format",
-        "eslint": "eslint . --ext ts",
-        "prettier": "prettier \"**/*.{css,html,ts,js,java}\" --plugin=prettier-plugin-java",
-        "swiftlint": "node-swiftlint",
-        "docgen": "docgen --api BackgroundGeolocationPlugin --output-readme README.md --output-json dist/docs.json",
-        "build": "npm run clean && npm run docgen && tsc && rollup -c rollup.config.mjs",
-        "clean": "rimraf ./dist",
-        "watch": "tsc --watch",
-        "prepublishOnly": "npm run build"
-    },
-    "keywords": [
-        "capacitor",
-        "plugin",
-        "native",
-        "accurate",
-        "background",
-        "geolocation"
-    ],
-    "devDependencies": {
-        "@capacitor/android": "^7.0.0",
-        "@capacitor/cli": "^7.0.0",
-        "@capacitor/core": "^7.0.0",
-        "@capacitor/docgen": "^0.3.0",
-        "@capacitor/ios": "^7.0.0",
-        "@ionic/eslint-config": "^0.4.0",
-        "@ionic/prettier-config": "^4.0.0",
-        "@ionic/swiftlint-config": "^2.0.0",
-        "@types/node": "^22.13.1",
-        "eslint": "^8.57.0",
-        "eslint-plugin-import": "^2.31.0",
-        "husky": "^9.1.7",
-        "prettier": "^3.4.2",
-        "prettier-plugin-java": "^2.6.7",
-        "rimraf": "^6.0.1",
-        "rollup": "^4.34.6",
-        "swiftlint": "^2.0.0",
-        "typescript": "^5.7.3"
-    },
-    "peerDependencies": {
-        "@capacitor/core": ">=7.0.0"
-    },
-    "prettier": "@ionic/prettier-config",
-    "swiftlint": "@ionic/swiftlint-config",
-    "eslintConfig": {
-        "extends": "@ionic/eslint-config/recommended"
-    },
-    "capacitor": {
-        "ios": {
-            "src": "ios"
-        },
-        "android": {
-            "src": "android"
-        }
+    "android": {
+      "src": "android"
     }
+  }
 }
