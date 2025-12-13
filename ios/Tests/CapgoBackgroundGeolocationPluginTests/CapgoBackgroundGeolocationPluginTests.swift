@@ -2,9 +2,10 @@ import XCTest
 import CoreLocation
 @testable import CapgoBackgroundGeolocationPlugin
 
+// swiftlint:disable:next type_body_length
 class CapgoBackgroundGeolocationTests: XCTestCase {
 
-    var plugin: BackgroundGeolocation!
+    var plugin: BackgroundGeolocation?
 
     override func setUp() {
         super.setUp()
@@ -19,12 +20,20 @@ class CapgoBackgroundGeolocationTests: XCTestCase {
     // MARK: - Plugin Initialization Tests
 
     func testPluginInitialization() {
+        guard let plugin = plugin else {
+            XCTFail("Plugin should not be nil")
+            return
+        }
         XCTAssertNotNil(plugin)
         XCTAssertEqual(plugin.identifier, "BackgroundGeolocationPlugin")
         XCTAssertEqual(plugin.jsName, "BackgroundGeolocation")
     }
 
     func testPluginMethods() {
+        guard let plugin = plugin else {
+            XCTFail("Plugin should not be nil")
+            return
+        }
         let methodNames = plugin.pluginMethods.map { $0.name }
         XCTAssertTrue(methodNames.contains("start"))
         XCTAssertTrue(methodNames.contains("stop"))

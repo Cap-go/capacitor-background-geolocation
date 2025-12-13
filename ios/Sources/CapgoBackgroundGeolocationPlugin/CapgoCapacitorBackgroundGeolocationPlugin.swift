@@ -1,3 +1,4 @@
+// swiftlint:disable file_length
 import Capacitor
 import Foundation
 import UIKit
@@ -13,8 +14,8 @@ func formatLocation(_ location: CLLocation) -> PluginCallResultData {
         // Prior to iOS 15, it was not possible to detect simulated locations.
         // But in general, it is very difficult to simulate locations on iOS in
         // production.
-        if location.sourceInformation != nil {
-            simulated = location.sourceInformation!.isSimulatedBySoftware
+        if let sourceInfo = location.sourceInformation {
+            simulated = sourceInfo.isSimulatedBySoftware
         }
     }
     return [
@@ -35,6 +36,7 @@ func formatLocation(_ location: CLLocation) -> PluginCallResultData {
 }
 
 @objc(BackgroundGeolocation)
+// swiftlint:disable:next type_body_length
 public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBridgedPlugin {
     private let pluginVersion: String = "8.0.1"
     public let identifier = "BackgroundGeolocationPlugin"
@@ -57,7 +59,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     private var distanceThreshold: Double = 50.0 // Default distance threshold in meters
 
     // Earth radius in meters for distance calculations
-    private static let EARTH_RADIUS_M: Double = 6371000.0
+    private static let earthRadiusMeters: Double = 6371000.0
 
     @objc override public func load() {
         UIDevice.current.isBatteryMonitoringEnabled = true
@@ -74,53 +76,68 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             }
             // Create fresh location manager and initialize date
             self.locationManager = CLLocationManager()
-            self.locationManager!.delegate = self
+            guard let manager = self.locationManager else {
+                return call.reject("Failed to create location manager")
+            }
+            manager.delegate = self
             self.created = Date()
 
             let background = call.getString("backgroundMessage") != nil
             self.allowStale = call.getBool("stale") ?? false
             self.activeCallbackId = call.callbackId
 
-            let externalPower = [
-                .full,
-                .charging
-            ].contains(UIDevice.current.batteryState)
-            self.locationManager!.desiredAccuracy = (
-                externalPower
-                    ? kCLLocationAccuracyBestForNavigation
-                    : kCLLocationAccuracyBest
-            )
-            var distanceFilter = call.getDouble("distanceFilter")
-            // It appears that setting manager.distanceFilter to 0 can prevent
-            // subsequent location updates. See issue #88.
-            if distanceFilter == nil || distanceFilter == 0 {
-                distanceFilter = kCLDistanceFilterNone
-            }
-            self.locationManager!.distanceFilter = distanceFilter!
-            self.locationManager!.allowsBackgroundLocationUpdates = background
-            self.locationManager!.showsBackgroundLocationIndicator = background
-            self.locationManager!.pausesLocationUpdatesAutomatically = false
+            self.configureLocationManager(manager, call: call, background: background)
 
             if call.getBool("requestPermissions") != false {
-                let status = CLLocationManager.authorizationStatus()
-                if [
-                    .notDetermined,
-                    .denied,
-                    .restricted
-                ].contains(status) {
-                    return (
-                        background
-                            ? self.locationManager!.requestAlwaysAuthorization()
-                            : self.locationManager!.requestWhenInUseAuthorization()
-                    )
-                }
-                if background && status == .authorizedWhenInUse {
-                    // Attempt to escalate.
-                    self.locationManager!.requestAlwaysAuthorization()
+                if self.handlePermissions(manager, background: background) {
+                    return
                 }
             }
             return self.startUpdatingLocation()
         }
+    }
+
+    private func configureLocationManager(_ manager: CLLocationManager, call: CAPPluginCall, background: Bool) {
+        let externalPower = [
+            .full,
+            .charging
+        ].contains(UIDevice.current.batteryState)
+        manager.desiredAccuracy = (
+            externalPower
+                ? kCLLocationAccuracyBestForNavigation
+                : kCLLocationAccuracyBest
+        )
+        var distanceFilter = call.getDouble("distanceFilter")
+        // It appears that setting manager.distanceFilter to 0 can prevent
+        // subsequent location updates. See issue #88.
+        if distanceFilter == nil || distanceFilter == 0 {
+            distanceFilter = kCLDistanceFilterNone
+        }
+        manager.distanceFilter = distanceFilter ?? kCLDistanceFilterNone
+        manager.allowsBackgroundLocationUpdates = background
+        manager.showsBackgroundLocationIndicator = background
+        manager.pausesLocationUpdatesAutomatically = false
+    }
+
+    private func handlePermissions(_ manager: CLLocationManager, background: Bool) -> Bool {
+        let status = CLLocationManager.authorizationStatus()
+        if [
+            .notDetermined,
+            .denied,
+            .restricted
+        ].contains(status) {
+            if background {
+                manager.requestAlwaysAuthorization()
+            } else {
+                manager.requestWhenInUseAuthorization()
+            }
+            return true
+        }
+        if background && status == .authorizedWhenInUse {
+            // Attempt to escalate.
+            manager.requestAlwaysAuthorization()
+        }
+        return false
     }
 
     @objc func stop(_ call: CAPPluginCall) {
@@ -151,8 +168,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             }
 
             if UIApplication.shared.canOpenURL(settingsUrl) {
-                UIApplication.shared.open(settingsUrl, completionHandler: {
-                    (success) in
+                UIApplication.shared.open(settingsUrl, completionHandler: { (success) in
                     if success {
                         return call.resolve()
                     } else {
@@ -252,7 +268,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
 
         let ccc = 2 * atan2(sqrt(aaa), sqrt(1 - aaa))
 
-        return BackgroundGeolocation.EARTH_RADIUS_M * ccc
+        return BackgroundGeolocation.earthRadiusMeters * ccc
     }
 
     private func distancePointToLineSegment(_ point: [Double], _ lineStart: [Double], _ lineEnd: [Double]) -> Double {
