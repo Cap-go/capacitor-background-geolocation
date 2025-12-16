@@ -24,6 +24,7 @@
   "bugs": {
     "url": "https://github.com/Cap-go/capacitor-background-geolocation/issues"
   },
+  "homepage": "https://capgo.app/docs/plugins/background-geolocation/",
   "scripts": {
     "verify": "npm run verify:ios && npm run verify:android && npm run verify:web",
     "verify:ios": "xcodebuild -scheme CapgoBackgroundGeolocation -destination generic/platform=iOS",
