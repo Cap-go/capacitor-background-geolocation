@@ -17,7 +17,7 @@
     "@capacitor/android": "7.0.0",
     "@capacitor/ios": "7.0.0",
     "@capgo/background-geolocation": "file:..",
-    "@capacitor/local-notifications": "7.0.0"
+    "@capacitor/local-notifications": "7.0.4"
   },
   "devDependencies": {
     "@capacitor/cli": "latest",
