@@ -125,15 +125,12 @@ public class BackgroundGeolocationService extends Service {
                 // crashing the app.
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     startForeground(
-                            NOTIFICATION_ID,
-                            createBackgroundNotification(notificationTitle, notificationMessage),
-                            ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                        NOTIFICATION_ID,
+                        createBackgroundNotification(notificationTitle, notificationMessage),
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
                     );
                 } else {
-                    startForeground(
-                            NOTIFICATION_ID,
-                            createBackgroundNotification(notificationTitle, notificationMessage)
-                    );
+                    startForeground(NOTIFICATION_ID, createBackgroundNotification(notificationTitle, notificationMessage));
                 }
             } catch (Exception exception) {
                 Logger.error("Failed to foreground service", exception);
