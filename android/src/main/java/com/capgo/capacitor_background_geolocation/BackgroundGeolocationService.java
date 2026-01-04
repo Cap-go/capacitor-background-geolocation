@@ -92,10 +92,7 @@ public class BackgroundGeolocationService extends Service {
         }
         try {
             PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
-            wakeLock = powerManager.newWakeLock(
-                PowerManager.PARTIAL_WAKE_LOCK,
-                "BackgroundGeolocation::LocationWakeLock"
-            );
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "BackgroundGeolocation::LocationWakeLock");
             wakeLock.acquire();
             Logger.info("Wake lock acquired");
         } catch (Exception e) {
