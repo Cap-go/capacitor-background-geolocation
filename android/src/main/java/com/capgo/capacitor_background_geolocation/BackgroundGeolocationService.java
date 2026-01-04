@@ -15,6 +15,7 @@ import android.media.MediaPlayer;
 import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
+import android.os.PowerManager;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import com.getcapacitor.Logger;
 
@@ -39,6 +40,7 @@ public class BackgroundGeolocationService extends Service {
     private double[][] route;
     private double distanceThreshold;
     private boolean isOffRoute;
+    private PowerManager.WakeLock wakeLock;
 
     @Override
     public IBinder onBind(Intent intent) {
@@ -55,6 +57,7 @@ public class BackgroundGeolocationService extends Service {
             client.removeUpdates(locationCallback);
         }
         releaseMediaPlayer();
+        releaseWakeLock();
         stopSelf();
         return false;
     }
@@ -66,6 +69,7 @@ public class BackgroundGeolocationService extends Service {
         }
         super.onDestroy();
         releaseMediaPlayer();
+        releaseWakeLock();
     }
 
     private void releaseMediaPlayer() {
@@ -83,11 +87,41 @@ public class BackgroundGeolocationService extends Service {
         mediaPlayer = null;
     }
 
+    private void acquireWakeLock() {
+        if (wakeLock != null && wakeLock.isHeld()) {
+            return;
+        }
+        try {
+            PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            wakeLock = powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "BackgroundGeolocation::LocationWakeLock");
+            wakeLock.acquire();
+            Logger.info("Wake lock acquired");
+        } catch (Exception e) {
+            Logger.error("Error acquiring wake lock", e);
+        }
+    }
+
+    private void releaseWakeLock() {
+        if (wakeLock == null) {
+            return;
+        }
+        try {
+            if (wakeLock.isHeld()) {
+                wakeLock.release();
+                Logger.info("Wake lock released");
+            }
+        } catch (Exception e) {
+            Logger.error("Error releasing wake lock", e);
+        }
+        wakeLock = null;
+    }
+
     // Handles requests from the activity.
     public class LocalBinder extends Binder {
 
         void start(final String id, final String notificationTitle, final String notificationMessage, float distanceFilter) {
             releaseMediaPlayer();
+            acquireWakeLock();
             client = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
             callbackId = id;
 
@@ -143,6 +177,7 @@ public class BackgroundGeolocationService extends Service {
             stopForeground(true);
             stopSelf();
             releaseMediaPlayer();
+            releaseWakeLock();
             return callbackId;
         }
 
