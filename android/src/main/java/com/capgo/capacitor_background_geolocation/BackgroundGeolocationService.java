@@ -5,6 +5,7 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ServiceInfo;
 import android.content.res.AssetFileDescriptor;
 import android.content.res.AssetManager;
 import android.graphics.Color;
@@ -122,8 +123,16 @@ public class BackgroundGeolocationService extends Service {
             try {
                 // This method has been known to fail due to weird
                 // permission bugs, so we prevent any exceptions from
-                // crashing the app. See issue #86.
-                startForeground(NOTIFICATION_ID, createBackgroundNotification(notificationTitle, notificationMessage));
+                // crashing the app.
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    startForeground(
+                        NOTIFICATION_ID,
+                        createBackgroundNotification(notificationTitle, notificationMessage),
+                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                    );
+                } else {
+                    startForeground(NOTIFICATION_ID, createBackgroundNotification(notificationTitle, notificationMessage));
+                }
             } catch (Exception exception) {
                 Logger.error("Failed to foreground service", exception);
             }
