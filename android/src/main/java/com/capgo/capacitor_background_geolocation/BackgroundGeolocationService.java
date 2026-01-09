@@ -14,7 +14,9 @@ import android.location.LocationManager;
 import android.media.MediaPlayer;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.PowerManager;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import com.getcapacitor.Logger;
@@ -40,6 +42,11 @@ public class BackgroundGeolocationService extends Service {
     private double[][] route;
     private double distanceThreshold;
     private boolean isOffRoute;
+
+    private Handler watchdogHandler = new Handler(Looper.getMainLooper());
+    private Runnable watchdogRunnable;
+    private Runnable restartRunnable;
+    private float currentDistanceFilter;
     private PowerManager.WakeLock wakeLock;
 
     @Override
@@ -58,6 +65,7 @@ public class BackgroundGeolocationService extends Service {
         }
         releaseMediaPlayer();
         releaseWakeLock();
+        stopWatchdog();
         stopSelf();
         return false;
     }
@@ -70,6 +78,7 @@ public class BackgroundGeolocationService extends Service {
         super.onDestroy();
         releaseMediaPlayer();
         releaseWakeLock();
+        stopWatchdog();
     }
 
     private void releaseMediaPlayer() {
@@ -116,6 +125,47 @@ public class BackgroundGeolocationService extends Service {
         wakeLock = null;
     }
 
+    private void restartLocationUpdates() {
+        Logger.debug("Location watchdog timed out, restarting updates");
+        if (client == null || locationCallback == null) {
+            return;
+        }
+        client.removeUpdates(locationCallback);
+        restartRunnable = () -> {
+            try {
+                client.requestLocationUpdates(
+                        LocationManager.GPS_PROVIDER,
+                        1000,
+                        currentDistanceFilter,
+                        locationCallback);
+            } catch (SecurityException ignore) {
+                // Permission issues are handled in the start() method
+            }
+            startWatchdog();
+        };
+        watchdogHandler.postDelayed(restartRunnable, 10000);
+    }
+
+    private void startWatchdog() {
+        stopWatchdog();
+        if (watchdogRunnable == null) {
+            watchdogRunnable = this::restartLocationUpdates;
+        }
+        watchdogHandler.postDelayed(watchdogRunnable, 60000);
+    }
+
+    private void stopWatchdog() {
+        if (watchdogHandler == null) {
+            return;
+        }
+        if (watchdogRunnable != null) {
+            watchdogHandler.removeCallbacks(watchdogRunnable);
+        }
+        if (restartRunnable != null) {
+            watchdogHandler.removeCallbacks(restartRunnable);
+        }
+    }
+
     // Handles requests from the activity.
     public class LocalBinder extends Binder {
 
@@ -124,8 +174,10 @@ public class BackgroundGeolocationService extends Service {
             acquireWakeLock();
             client = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
             callbackId = id;
+            currentDistanceFilter = distanceFilter;
 
             locationCallback = (location) -> {
+                startWatchdog();
                 if (mediaPlayer != null) {
                     double[] point = { location.getLongitude(), location.getLatitude() };
                     var offRoute = distancePointToRoute(point) > distanceThreshold;
@@ -170,9 +222,11 @@ public class BackgroundGeolocationService extends Service {
             } catch (Exception exception) {
                 Logger.error("Failed to foreground service", exception);
             }
+            startWatchdog();
         }
 
         String stop() {
+            stopWatchdog();
             client.removeUpdates(locationCallback);
             stopForeground(true);
             stopSelf();
