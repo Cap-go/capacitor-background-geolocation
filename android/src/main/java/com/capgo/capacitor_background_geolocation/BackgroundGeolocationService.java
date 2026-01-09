@@ -218,7 +218,6 @@ public class BackgroundGeolocationService extends Service {
             } catch (Exception exception) {
                 Logger.error("Failed to foreground service", exception);
             }
-            startWatchdog();
         }
 
         String stop() {
