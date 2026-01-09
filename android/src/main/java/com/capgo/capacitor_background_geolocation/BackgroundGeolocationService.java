@@ -132,6 +132,9 @@ public class BackgroundGeolocationService extends Service {
         }
         client.removeUpdates(locationCallback);
         restartRunnable = () -> {
+            if (client == null || locationCallback == null) {
+                return;
+            }
             try {
                 client.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, currentDistanceFilter, locationCallback);
             } catch (SecurityException ignore) {
