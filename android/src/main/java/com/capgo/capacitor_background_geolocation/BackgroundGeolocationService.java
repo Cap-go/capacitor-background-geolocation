@@ -131,6 +131,9 @@ public class BackgroundGeolocationService extends Service {
             return;
         }
         client.removeUpdates(locationCallback);
+        if (restartRunnable != null) {
+            watchdogHandler.removeCallbacks(restartRunnable);
+        }
         restartRunnable = () -> {
             if (client == null || locationCallback == null) {
                 return;
