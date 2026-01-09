@@ -133,11 +133,7 @@ public class BackgroundGeolocationService extends Service {
         client.removeUpdates(locationCallback);
         restartRunnable = () -> {
             try {
-                client.requestLocationUpdates(
-                        LocationManager.GPS_PROVIDER,
-                        1000,
-                        currentDistanceFilter,
-                        locationCallback);
+                client.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, currentDistanceFilter, locationCallback);
             } catch (SecurityException ignore) {
                 // Permission issues are handled in the start() method
             }
