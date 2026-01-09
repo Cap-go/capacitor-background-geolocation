@@ -154,9 +154,6 @@ public class BackgroundGeolocationService extends Service {
     }
 
     private void stopWatchdog() {
-        if (watchdogHandler == null) {
-            return;
-        }
         if (watchdogRunnable != null) {
             watchdogHandler.removeCallbacks(watchdogRunnable);
         }
