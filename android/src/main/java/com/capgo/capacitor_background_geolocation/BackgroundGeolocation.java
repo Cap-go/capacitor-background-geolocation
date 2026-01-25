@@ -145,6 +145,7 @@ public class BackgroundGeolocation extends Plugin {
     public void stop(PluginCall call) {
         if (serviceConnectionFuture == null) {
             call.resolve();
+            return;
         }
         getServiceConnection()
             .thenAccept((service) -> {
