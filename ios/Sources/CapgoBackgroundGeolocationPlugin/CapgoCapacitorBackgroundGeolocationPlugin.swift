@@ -120,7 +120,13 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     }
 
     private func handlePermissions(_ manager: CLLocationManager, background: Bool) -> Bool {
-        let status = CLLocationManager.authorizationStatus()
+        let status: CLAuthorizationStatus
+        if #available(iOS 14.0, *) {
+            status = manager.authorizationStatus
+        } else {
+            // Fallback for older versions
+            status = CLLocationManager.authorizationStatus()
+        }
         if [
             .notDetermined,
             .denied,
