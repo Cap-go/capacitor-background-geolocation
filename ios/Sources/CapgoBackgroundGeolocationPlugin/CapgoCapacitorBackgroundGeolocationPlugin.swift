@@ -120,7 +120,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     }
 
     private func handlePermissions(_ manager: CLLocationManager, background: Bool) -> Bool {
-        let status = CLLocationManager.authorizationStatus()
+        let status = manager.authorizationStatus
         if [
             .notDetermined,
             .denied,
