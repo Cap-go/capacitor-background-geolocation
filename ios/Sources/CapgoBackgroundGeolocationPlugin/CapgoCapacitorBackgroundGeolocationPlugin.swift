@@ -38,7 +38,7 @@ func formatLocation(_ location: CLLocation) -> PluginCallResultData {
 @objc(BackgroundGeolocation)
 // swiftlint:disable:next type_body_length
 public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBridgedPlugin {
-    private let pluginVersion: String = "8.0.21"
+    private let pluginVersion: String = "8.0.22"
     public let identifier = "BackgroundGeolocationPlugin"
     public let jsName = "BackgroundGeolocation"
     public let pluginMethods: [CAPPluginMethod] = [
