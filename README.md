@@ -6,8 +6,16 @@
   <h2><a href="https://capgo.app/consulting/?ref=plugin_background_geolocation"> Missing a feature? We’ll build the plugin for you 💪</a></h2>
 </div>
 
-A Capacitor plugin that lets you receive accurate geolocation updates even while the app is backgrounded.
-It has a web API to facilitate for a similar usage, but background geolocation is not supported in a regular browser, only in an app environment.
+A Capacitor plugin for accurate background location tracking and native geofencing on iOS and Android.
+Use it to stream precise location updates, monitor circular geofence regions, react to enter/exit events in JavaScript, and POST geofence transitions natively while the WebView is suspended.
+
+## Features
+
+- Accurate foreground and background geolocation without a paid license.
+- Native geofencing on iOS and Android for circular regions.
+- Enter and exit events through `geofenceTransition` while the app is alive.
+- Native webhook delivery for geofence transitions when the WebView is suspended.
+- A web fallback for development and browser-based testing.
 
 ## This plugin's history
 
@@ -32,16 +40,17 @@ I hope you'll enjoy it!
 
 A short comparison between the three main background-geolocation plugins commonly used in Capacitor apps.
 
-| Plugin | Accuracy | Background | HTTP Upload | Pricing |
-|--------|----------|------------|-------------|---------|
-| `@capacitor-community/background-geolocation` (Community) | Not accurate | Yes | No | Free |
-| `@capgo/background-geolocation` (this plugin) | Accurate | Yes | No | Free |
-| Transistorsoft (original) | Accurate | Yes | Yes — built-in HTTP uploader to your API | Paid |
+| Plugin | Accuracy | Background | Geofencing | Native transition POST | Pricing |
+|--------|----------|------------|------------|------------------------|---------|
+| `@capacitor-community/background-geolocation` (Community) | Not accurate | Yes | No | No | Free |
+| `@capgo/background-geolocation` (this plugin) | Accurate | Yes | iOS and Android | Yes, for geofence transitions | Free |
+| Transistorsoft (original) | Accurate | Yes | Yes | Yes, built-in HTTP uploader | Paid |
 
 Notes:
 - The Community plugin is lightweight and continues to work in the background, but it is known to be less accurate than the options below.
-- This Cap-go plugin aims to provide accurate location fixes and reliable background operation without requiring a paid license.
-- Transistorsoft's plugin is a mature, accurate solution that also includes an HTTP uploader (it can send location updates to your API). It is a commercial product and requires a paid license for full use.
+- This Cap-go plugin aims to provide accurate location fixes, reliable background operation, and native geofence enter/exit handling without requiring a paid license.
+- Native geofence POST delivery is useful when iOS or Android wakes native code for a region transition but the Capacitor WebView is not running.
+- Transistorsoft's plugin is a mature, accurate solution that also includes a broader HTTP uploader. It is a commercial product and requires a paid license for full use.
 
 
 ## Usage
@@ -84,6 +93,14 @@ BackgroundGeolocation.start(
 // Set a planned route to get a notification sound when a new location arrives and it's not on the route:
         
 BackgroundGeolocation.setPlannedRoute({soundFile: "assets/myFile.mp3", route: [[1,2], [3,4]], distance: 30 });
+```
+
+## Native geofencing
+
+Use native geofencing when you need lightweight location boundaries such as stores, job sites, delivery zones, campuses, or check-in areas. The plugin monitors geofences natively, emits JavaScript events while the app is active, and can send transition payloads directly to your backend while the WebView is suspended.
+
+```javascript
+import { BackgroundGeolocation } from "@capgo/background-geolocation";
 
 // Geofencing can notify JavaScript while the app is alive and can also POST
 // transitions natively while the WebView is suspended.
@@ -108,7 +125,9 @@ const handle = await BackgroundGeolocation.addListener(
 
 await BackgroundGeolocation.removeGeofence({ identifier: "office" });
 handle.remove();
+```
 
+```javascript
 // If you just want the current location, try something like this. The longer
 // the timeout, the more accurate the guess will be. I wouldn't go below about 100ms.
 function guessLocation(callback, timeout) {
