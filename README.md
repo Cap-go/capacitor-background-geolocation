@@ -85,6 +85,30 @@ BackgroundGeolocation.start(
         
 BackgroundGeolocation.setPlannedRoute({soundFile: "assets/myFile.mp3", route: [[1,2], [3,4]], distance: 30 });
 
+// Geofencing can notify JavaScript while the app is alive and can also POST
+// transitions natively while the WebView is suspended.
+await BackgroundGeolocation.setupGeofencing({
+    url: "https://api.example.com/geofences",
+    notifyOnEntry: true,
+    notifyOnExit: true,
+    payload: { userId: "123" }
+});
+
+await BackgroundGeolocation.addGeofence({
+    identifier: "office",
+    latitude: 37.33182,
+    longitude: -122.03118,
+    radius: 150
+});
+
+const handle = await BackgroundGeolocation.addListener(
+    "geofenceTransition",
+    (event) => console.log(event.identifier, event.transition)
+);
+
+await BackgroundGeolocation.removeGeofence({ identifier: "office" });
+handle.remove();
+
 // If you just want the current location, try something like this. The longer
 // the timeout, the more accurate the guess will be. I wouldn't go below about 100ms.
 function guessLocation(callback, timeout) {
@@ -123,15 +147,15 @@ The most complete doc is available here: https://capgo.app/docs/plugins/backgrou
 
 ## Installation
 
-This plugin supports Capacitor v7:
+This plugin supports Capacitor v8:
 
 | Capacitor  | Plugin |
 |------------|--------|
-| v7         | v7     |
+| v8         | v8     |
 
 ```sh
-npm install @capgo/background-geolocation
-npx cap update
+bun add @capgo/background-geolocation
+bunx cap update
 ```
 
 ### iOS
@@ -157,6 +181,8 @@ Add the following keys to `Info.plist.`:
 Set the the `android.useLegacyBridge` option to `true` in your Capacitor configuration. This prevents location updates halting after 5 minutes in the background. See https://capacitorjs.com/docs/config and https://github.com/capacitor-community/background-geolocation/issues/89.
 
 On Android 13+, the app needs the `POST_NOTIFICATIONS` runtime permission to show the persistent notification informing the user that their location is being used in the background. This runtime permission is requested after the location permission is granted.
+
+For geofencing on Android 10+, the app also needs `ACCESS_BACKGROUND_LOCATION`. Android may require the user to grant this from system settings after foreground location is granted; use `openSettings()` if the permission remains denied.
 
 If your app forwards location updates to a server in real time, be aware that after 5 minutes in the background Android will throttle HTTP requests initiated from the WebView. The solution is to use a native HTTP plugin such as [CapacitorHttp](https://capacitorjs.com/docs/apis/http). See https://github.com/capacitor-community/background-geolocation/issues/14.
 
@@ -212,8 +238,15 @@ Configuration specific to Android can be made in `strings.xml`:
 * [`stop()`](#stop)
 * [`openSettings()`](#opensettings)
 * [`setPlannedRoute(...)`](#setplannedroute)
+* [`setupGeofencing(...)`](#setupgeofencing)
+* [`addGeofence(...)`](#addgeofence)
+* [`removeGeofence(...)`](#removegeofence)
+* [`removeAllGeofences()`](#removeallgeofences)
+* [`getMonitoredGeofences()`](#getmonitoredgeofences)
+* [`addListener('geofenceTransition', ...)`](#addlistenergeofencetransition-)
 * [`getPluginVersion()`](#getpluginversion)
 * [Interfaces](#interfaces)
+* [Type Aliases](#type-aliases)
 
 </docgen-index>
 
@@ -288,6 +321,111 @@ This should be used to play a sound (in the background too, only for native).
 --------------------
 
 
+### setupGeofencing(...)
+
+```typescript
+setupGeofencing(options: GeofenceSetupOptions) => Promise<void>
+```
+
+Configures native geofence transition handling.
+
+Call this before adding geofences when you need native background POSTs
+or default entry/exit settings.
+
+| Param         | Type                                                                  | Description                        |
+| ------------- | --------------------------------------------------------------------- | ---------------------------------- |
+| **`options`** | <code><a href="#geofencesetupoptions">GeofenceSetupOptions</a></code> | The geofence configuration options |
+
+**Since:** 8.0.30
+
+--------------------
+
+
+### addGeofence(...)
+
+```typescript
+addGeofence(options: AddGeofenceOptions) => Promise<void>
+```
+
+Starts monitoring a circular native geofence.
+
+| Param         | Type                                                              | Description                 |
+| ------------- | ----------------------------------------------------------------- | --------------------------- |
+| **`options`** | <code><a href="#addgeofenceoptions">AddGeofenceOptions</a></code> | The geofence region options |
+
+**Since:** 8.0.30
+
+--------------------
+
+
+### removeGeofence(...)
+
+```typescript
+removeGeofence(options: RemoveGeofenceOptions) => Promise<void>
+```
+
+Stops monitoring one geofence.
+
+| Param         | Type                                                                    | Description             |
+| ------------- | ----------------------------------------------------------------------- | ----------------------- |
+| **`options`** | <code><a href="#removegeofenceoptions">RemoveGeofenceOptions</a></code> | The geofence identifier |
+
+**Since:** 8.0.30
+
+--------------------
+
+
+### removeAllGeofences()
+
+```typescript
+removeAllGeofences() => Promise<void>
+```
+
+Stops monitoring every geofence registered by this plugin.
+
+**Since:** 8.0.30
+
+--------------------
+
+
+### getMonitoredGeofences()
+
+```typescript
+getMonitoredGeofences() => Promise<MonitoredGeofencesResult>
+```
+
+Lists the geofence identifiers currently monitored by this plugin.
+
+**Returns:** <code>Promise&lt;<a href="#monitoredgeofencesresult">MonitoredGeofencesResult</a>&gt;</code>
+
+**Since:** 8.0.30
+
+--------------------
+
+
+### addListener('geofenceTransition', ...)
+
+```typescript
+addListener(eventName: 'geofenceTransition', listenerFunc: (event: GeofenceTransitionEvent) => void) => Promise<PluginListenerHandle>
+```
+
+Listens for geofence enter/exit transitions while the WebView is alive.
+
+Native `url` delivery configured through `setupGeofencing` is used for
+background-safe delivery.
+
+| Param              | Type                                                                                            |
+| ------------------ | ----------------------------------------------------------------------------------------------- |
+| **`eventName`**    | <code>'geofenceTransition'</code>                                                               |
+| **`listenerFunc`** | <code>(event: <a href="#geofencetransitionevent">GeofenceTransitionEvent</a>) =&gt; void</code> |
+
+**Returns:** <code>Promise&lt;<a href="#pluginlistenerhandle">PluginListenerHandle</a>&gt;</code>
+
+**Since:** 8.0.30
+
+--------------------
+
+
 ### getPluginVersion()
 
 ```typescript
@@ -352,5 +490,89 @@ Extends the standard Error with optional error codes.
 | **`soundFile`** | <code>string</code>             | The name of the sound file to play. Must be a valid sound relative path in the app's public folder to work for both web and native platforms. There's no need to include the public folder in the path.                                            |                 | 7.0.10 |
 | **`route`**     | <code>[number, number][]</code> | The planned route as an array of longitude and latitude pairs. Each pair represents a point on the route. This is used to define a route that the user can follow. The route is used to play a sound when the user deviates from it.               |                 | 7.0.11 |
 | **`distance`**  | <code>number</code>             | The distance in meters that the user must deviate from the planned route to trigger the sound. This is used to determine how far off the route the user can be before the sound is played. If not specified, a default value of 50 meters is used. | <code>50</code> | 7.0.11 |
+
+
+#### GeofenceSetupOptions
+
+Options for configuring native geofence transition handling.
+
+When `url` is provided, native iOS and Android code sends a JSON `POST`
+whenever a monitored region is entered or exited. This keeps geofence
+handling useful when the WebView is suspended.
+
+| Prop                     | Type                                                             | Description                                                                                                                                                                                                                                              | Default           | Since  |
+| ------------------------ | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | ------ |
+| **`url`**                | <code>string</code>                                              | Endpoint that receives geofence transition payloads.                                                                                                                                                                                                     |                   | 8.0.30 |
+| **`notifyOnEntry`**      | <code>boolean</code>                                             | Whether entry transitions should be monitored.                                                                                                                                                                                                           | <code>true</code> | 8.0.30 |
+| **`notifyOnExit`**       | <code>boolean</code>                                             | Whether exit transitions should be monitored.                                                                                                                                                                                                            | <code>true</code> | 8.0.30 |
+| **`payload`**            | <code><a href="#record">Record</a>&lt;string, unknown&gt;</code> | Base JSON payload merged into every native transition POST and listener event.                                                                                                                                                                           |                   | 8.0.30 |
+| **`requestPermissions`** | <code>boolean</code>                                             | Whether the plugin should request the native location permission needed for geofencing. iOS geofencing needs Always location authorization. Android background geofencing needs foreground location and, on Android 10+, background location permission. | <code>true</code> | 8.0.30 |
+
+
+#### AddGeofenceOptions
+
+A circular geofence region.
+
+| Prop                | Type                                                             | Description                                              | Default         | Since  |
+| ------------------- | ---------------------------------------------------------------- | -------------------------------------------------------- | --------------- | ------ |
+| **`latitude`**      | <code>number</code>                                              | Latitude in degrees for the region center.               |                 | 8.0.30 |
+| **`longitude`**     | <code>number</code>                                              | Longitude in degrees for the region center.              |                 | 8.0.30 |
+| **`radius`**        | <code>number</code>                                              | Region radius in meters.                                 | <code>50</code> | 8.0.30 |
+| **`identifier`**    | <code>string</code>                                              | Stable identifier for the geofence.                      |                 | 8.0.30 |
+| **`notifyOnEntry`** | <code>boolean</code>                                             | Overrides the setup-level entry setting for this region. |                 | 8.0.30 |
+| **`notifyOnExit`**  | <code>boolean</code>                                             | Overrides the setup-level exit setting for this region.  |                 | 8.0.30 |
+| **`payload`**       | <code><a href="#record">Record</a>&lt;string, unknown&gt;</code> | Region-specific payload merged over the setup payload.   |                 | 8.0.30 |
+
+
+#### RemoveGeofenceOptions
+
+Options for removing a monitored geofence.
+
+| Prop             | Type                | Description                         | Since  |
+| ---------------- | ------------------- | ----------------------------------- | ------ |
+| **`identifier`** | <code>string</code> | Identifier passed to `addGeofence`. | 8.0.30 |
+
+
+#### MonitoredGeofencesResult
+
+Result returned when listing monitored geofences.
+
+| Prop          | Type                  | Description                                                       | Since  |
+| ------------- | --------------------- | ----------------------------------------------------------------- | ------ |
+| **`regions`** | <code>string[]</code> | Identifiers for all geofences currently monitored by this plugin. | 8.0.30 |
+
+
+#### PluginListenerHandle
+
+| Prop         | Type                                      |
+| ------------ | ----------------------------------------- |
+| **`remove`** | <code>() =&gt; Promise&lt;void&gt;</code> |
+
+
+#### GeofenceTransitionEvent
+
+Event emitted when a monitored geofence is entered or exited.
+
+The same data is also sent to the configured `url`, when one is set.
+
+| Prop             | Type                                                             | Description                                                           | Since  |
+| ---------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------- | ------ |
+| **`identifier`** | <code>string</code>                                              | Identifier of the geofence that changed state.                        | 8.0.30 |
+| **`transition`** | <code>'enter' \| 'exit'</code>                                   | Transition name.                                                      | 8.0.30 |
+| **`enter`**      | <code>boolean</code>                                             | `true` for entry transitions, `false` for exit transitions.           | 8.0.30 |
+| **`latitude`**   | <code>number</code>                                              | Latitude in degrees for the monitored region center, when available.  | 8.0.30 |
+| **`longitude`**  | <code>number</code>                                              | Longitude in degrees for the monitored region center, when available. | 8.0.30 |
+| **`radius`**     | <code>number</code>                                              | Region radius in meters, when available.                              | 8.0.30 |
+| **`payload`**    | <code><a href="#record">Record</a>&lt;string, unknown&gt;</code> | Merged setup and region payload.                                      | 8.0.30 |
+
+
+### Type Aliases
+
+
+#### Record
+
+Construct a type with a set of properties K of type T
+
+<code>{ [P in K]: T; }</code>
 
 </docgen-api>

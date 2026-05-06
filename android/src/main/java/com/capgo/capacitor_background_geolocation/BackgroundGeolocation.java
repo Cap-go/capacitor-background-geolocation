@@ -3,19 +3,21 @@ package com.capgo.capacitor_background_geolocation;
 import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
+import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
 import android.location.Location;
 import android.location.LocationManager;
 import android.net.Uri;
 import android.os.Build;
 import android.os.IBinder;
 import android.provider.Settings;
-import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
@@ -27,7 +29,13 @@ import com.getcapacitor.PluginMethod;
 import com.getcapacitor.annotation.CapacitorPlugin;
 import com.getcapacitor.annotation.Permission;
 import com.getcapacitor.annotation.PermissionCallback;
+import com.google.android.gms.location.Geofence;
+import com.google.android.gms.location.GeofencingClient;
+import com.google.android.gms.location.GeofencingRequest;
 import com.google.android.gms.location.LocationServices;
+import java.net.URL;
+import java.util.Collections;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -37,15 +45,21 @@ import org.json.JSONObject;
     name = "BackgroundGeolocation",
     permissions = {
         @Permission(strings = { Manifest.permission.ACCESS_COARSE_LOCATION, Manifest.permission.ACCESS_FINE_LOCATION }, alias = "location"),
+        @Permission(strings = { Manifest.permission.ACCESS_BACKGROUND_LOCATION }, alias = "backgroundLocation"),
         @Permission(strings = { Manifest.permission.POST_NOTIFICATIONS }, alias = "notification")
     }
 )
 public class BackgroundGeolocation extends Plugin {
 
+    private static final int GEOFENCE_PENDING_INTENT_REQUEST_CODE = 83620;
+
     private final String pluginVersion = "";
 
     private CompletableFuture<BackgroundGeolocationService.LocalBinder> serviceConnectionFuture;
     private CompletableFuture<Void> locationPermissionFuture;
+    private CompletableFuture<Void> geofencePermissionFuture;
+    private BroadcastReceiver serviceReceiver;
+    private BroadcastReceiver geofenceEventReceiver;
 
     private void fetchLastLocation(PluginCall call) {
         try {
@@ -199,6 +213,238 @@ public class BackgroundGeolocation extends Plugin {
         }
     }
 
+    @PluginMethod
+    public void setupGeofencing(PluginCall call) {
+        String url = call.getString("url");
+        if (url != null && !url.isEmpty()) {
+            try {
+                new URL(url);
+            } catch (Exception exception) {
+                call.reject("Given url is not valid");
+                return;
+            }
+        }
+
+        JSObject payload = call.getObject("payload", new JSObject());
+        GeofenceStore.saveSetup(getContext(), url, call.getBoolean("notifyOnEntry", true), call.getBoolean("notifyOnExit", true), payload);
+
+        if (!call.getBoolean("requestPermissions", true)) {
+            call.resolve();
+            return;
+        }
+
+        requestGeofencePermissions(call)
+            .thenRun(call::resolve)
+            .exceptionally((throwable) -> {
+                call.reject("Background location permission is required for geofencing", "NOT_AUTHORIZED");
+                return null;
+            });
+    }
+
+    @PluginMethod
+    public void addGeofence(PluginCall call) {
+        if (!hasGeofencePermissions()) {
+            call.reject("Background location permission is required for geofencing", "NOT_AUTHORIZED");
+            return;
+        }
+        if (!isLocationEnabled(getContext())) {
+            call.reject("Location services disabled.", "NOT_AUTHORIZED");
+            return;
+        }
+
+        Double latitude = call.getDouble("latitude");
+        Double longitude = call.getDouble("longitude");
+        String identifier = call.getString("identifier");
+        double radius = call.getDouble("radius", 50.0);
+        if (identifier == null || identifier.isEmpty()) {
+            call.reject("Identifier is required");
+            return;
+        }
+        if (latitude == null || latitude < -90 || latitude > 90) {
+            call.reject("Latitude must be between -90 and 90");
+            return;
+        }
+        if (longitude == null || longitude < -180 || longitude > 180) {
+            call.reject("Longitude must be between -180 and 180");
+            return;
+        }
+        if (radius <= 0) {
+            call.reject("Radius must be greater than 0");
+            return;
+        }
+
+        boolean notifyOnEntry = call.getBoolean("notifyOnEntry", GeofenceStore.getNotifyOnEntry(getContext()));
+        boolean notifyOnExit = call.getBoolean("notifyOnExit", GeofenceStore.getNotifyOnExit(getContext()));
+        int transitionTypes = 0;
+        int initialTrigger = 0;
+        if (notifyOnEntry) {
+            transitionTypes |= Geofence.GEOFENCE_TRANSITION_ENTER;
+            initialTrigger |= GeofencingRequest.INITIAL_TRIGGER_ENTER;
+        }
+        if (notifyOnExit) {
+            transitionTypes |= Geofence.GEOFENCE_TRANSITION_EXIT;
+        }
+        if (transitionTypes == 0) {
+            call.reject("At least one transition must be enabled");
+            return;
+        }
+
+        JSObject payload = call.getObject("payload", new JSObject());
+        Geofence geofence = new Geofence.Builder()
+            .setRequestId(identifier)
+            .setCircularRegion(latitude, longitude, (float) radius)
+            .setTransitionTypes(transitionTypes)
+            .setExpirationDuration(Geofence.NEVER_EXPIRE)
+            .build();
+        GeofencingRequest request = new GeofencingRequest.Builder().setInitialTrigger(initialTrigger).addGeofence(geofence).build();
+
+        try {
+            getGeofencingClient()
+                .addGeofences(request, getGeofencePendingIntent())
+                .addOnSuccessListener((unused) -> {
+                    try {
+                        GeofenceStore.saveRegion(
+                            getContext(),
+                            identifier,
+                            latitude,
+                            longitude,
+                            (float) radius,
+                            notifyOnEntry,
+                            notifyOnExit,
+                            payload
+                        );
+                        call.resolve();
+                    } catch (JSONException exception) {
+                        call.reject("Could not persist geofence", exception);
+                    }
+                })
+                .addOnFailureListener((exception) -> call.reject("Could not start monitoring the geofence", exception));
+        } catch (SecurityException exception) {
+            call.reject("Background location permission is required for geofencing", "NOT_AUTHORIZED", exception);
+        }
+    }
+
+    @PluginMethod
+    public void removeGeofence(PluginCall call) {
+        String identifier = call.getString("identifier");
+        if (identifier == null || identifier.isEmpty()) {
+            call.reject("Identifier is required");
+            return;
+        }
+        getGeofencingClient()
+            .removeGeofences(Collections.singletonList(identifier))
+            .addOnSuccessListener((unused) -> {
+                GeofenceStore.removeRegion(getContext(), identifier);
+                call.resolve();
+            })
+            .addOnFailureListener((exception) -> call.reject("Could not stop monitoring the geofence", exception));
+    }
+
+    @PluginMethod
+    public void removeAllGeofences(PluginCall call) {
+        getGeofencingClient()
+            .removeGeofences(getGeofencePendingIntent())
+            .addOnSuccessListener((unused) -> {
+                GeofenceStore.clearRegions(getContext());
+                call.resolve();
+            })
+            .addOnFailureListener((exception) -> call.reject("Could not stop monitoring geofences", exception));
+    }
+
+    @PluginMethod
+    public void getMonitoredGeofences(PluginCall call) {
+        JSObject result = new JSObject();
+        Set<String> regionIds = GeofenceStore.getRegionIds(getContext());
+        JSArray regions = new JSArray();
+        for (String regionId : regionIds) {
+            regions.put(regionId);
+        }
+        result.put("regions", regions);
+        call.resolve(result);
+    }
+
+    private CompletableFuture<Void> requestGeofencePermissions(PluginCall call) {
+        if (hasGeofencePermissions()) {
+            return CompletableFuture.completedFuture(null);
+        }
+        if (geofencePermissionFuture != null) {
+            return geofencePermissionFuture;
+        }
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        geofencePermissionFuture = future;
+        if (getPermissionState("location") != PermissionState.GRANTED) {
+            requestPermissionForAlias("location", call, "geofenceLocationPermissionsCallback");
+            return future;
+        }
+        requestBackgroundLocationPermissionIfNeeded(call);
+        return future;
+    }
+
+    @PermissionCallback
+    private void geofenceLocationPermissionsCallback(PluginCall call) {
+        if (geofencePermissionFuture == null) {
+            return;
+        }
+        if (getPermissionState("location") != PermissionState.GRANTED) {
+            geofencePermissionFuture.completeExceptionally(new SecurityException("User denied location permission"));
+            geofencePermissionFuture = null;
+            return;
+        }
+        requestBackgroundLocationPermissionIfNeeded(call);
+    }
+
+    @PermissionCallback
+    private void geofenceBackgroundPermissionsCallback(PluginCall call) {
+        if (geofencePermissionFuture == null) {
+            return;
+        }
+        if (!hasBackgroundLocationPermission()) {
+            geofencePermissionFuture.completeExceptionally(new SecurityException("User denied background location permission"));
+            geofencePermissionFuture = null;
+            return;
+        }
+        geofencePermissionFuture.complete(null);
+        geofencePermissionFuture = null;
+    }
+
+    private void requestBackgroundLocationPermissionIfNeeded(PluginCall call) {
+        if (hasBackgroundLocationPermission()) {
+            geofencePermissionFuture.complete(null);
+            geofencePermissionFuture = null;
+            return;
+        }
+        requestPermissionForAlias("backgroundLocation", call, "geofenceBackgroundPermissionsCallback");
+    }
+
+    private boolean hasGeofencePermissions() {
+        return getPermissionState("location") == PermissionState.GRANTED && hasBackgroundLocationPermission();
+    }
+
+    private boolean hasBackgroundLocationPermission() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return true;
+        }
+        return (
+            ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
+            PackageManager.PERMISSION_GRANTED
+        );
+    }
+
+    private GeofencingClient getGeofencingClient() {
+        return LocationServices.getGeofencingClient(getContext());
+    }
+
+    private PendingIntent getGeofencePendingIntent() {
+        Intent intent = new Intent(getContext(), GeofenceBroadcastReceiver.class);
+        intent.setPackage(getContext().getPackageName());
+        return PendingIntent.getBroadcast(
+            getContext(),
+            GEOFENCE_PENDING_INTENT_REQUEST_CODE,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
+        );
+    }
+
     private static double[][] getJavaDoubleArray(JSArray jsArray) throws JSONException {
         int rows = jsArray.length();
         if (rows == 0) {
@@ -277,6 +523,22 @@ public class BackgroundGeolocation extends Plugin {
         }
     }
 
+    private class GeofenceEventReceiver extends BroadcastReceiver {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String payload = intent.getStringExtra(GeofenceStore.EXTRA_GEOFENCE_PAYLOAD);
+            if (payload == null || payload.isEmpty()) {
+                return;
+            }
+            try {
+                notifyListeners("geofenceTransition", GeofenceStore.toJSObject(new JSONObject(payload)), true);
+            } catch (JSONException exception) {
+                Logger.error("Could not parse geofence transition payload", exception);
+            }
+        }
+    }
+
     @Override
     public void load() {
         super.load();
@@ -299,9 +561,16 @@ public class BackgroundGeolocation extends Plugin {
             manager.createNotificationChannel(channel);
         }
 
+        serviceReceiver = new ServiceReceiver();
         LocalBroadcastManager.getInstance(this.getContext()).registerReceiver(
-            new ServiceReceiver(),
+            serviceReceiver,
             new IntentFilter(BackgroundGeolocationService.ACTION_BROADCAST)
+        );
+
+        geofenceEventReceiver = new GeofenceEventReceiver();
+        LocalBroadcastManager.getInstance(this.getContext()).registerReceiver(
+            geofenceEventReceiver,
+            new IntentFilter(GeofenceStore.ACTION_GEOFENCE_EVENT)
         );
     }
 
@@ -346,6 +615,17 @@ public class BackgroundGeolocation extends Plugin {
 
         if (locationPermissionFuture != null && !locationPermissionFuture.isDone()) {
             locationPermissionFuture.cancel(true);
+        }
+        if (geofencePermissionFuture != null && !geofencePermissionFuture.isDone()) {
+            geofencePermissionFuture.cancel(true);
+        }
+        if (serviceReceiver != null) {
+            LocalBroadcastManager.getInstance(this.getContext()).unregisterReceiver(serviceReceiver);
+            serviceReceiver = null;
+        }
+        if (geofenceEventReceiver != null) {
+            LocalBroadcastManager.getInstance(this.getContext()).unregisterReceiver(geofenceEventReceiver);
+            geofenceEventReceiver = null;
         }
         super.handleOnDestroy();
     }

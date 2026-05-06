@@ -46,9 +46,15 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         CAPPluginMethod(name: "stop", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "openSettings", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPlannedRoute", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "setupGeofencing", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "addGeofence", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "removeGeofence", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "removeAllGeofences", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getMonitoredGeofences", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPluginVersion", returnType: CAPPluginReturnPromise)
     ]
     private var locationManager: CLLocationManager?
+    private var geofenceLocationManager: CLLocationManager?
     private var created: Date?
     private var allowStale: Bool = false
     private var isUpdatingLocation: Bool = false
@@ -57,12 +63,28 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     private var plannedRoute: [[Double]] = []
     private var isOffRoute: Bool = true
     private var distanceThreshold: Double = 50.0 // Default distance threshold in meters
+    private var geofenceBackendUrl: URL?
+    private var geofenceNotifyOnEntry: Bool = true
+    private var geofenceNotifyOnExit: Bool = true
+    private var geofencePayload: [String: Any] = [:]
+    private var pendingGeofenceSetupCall: CAPPluginCall?
+    private var lastGeofenceTransition: [String: String] = [:]
+
+    private let geofenceUrlKey = "CapgoBackgroundGeolocation.geofence.url"
+    private let geofenceNotifyOnEntryKey = "CapgoBackgroundGeolocation.geofence.notifyOnEntry"
+    private let geofenceNotifyOnExitKey = "CapgoBackgroundGeolocation.geofence.notifyOnExit"
+    private let geofencePayloadKey = "CapgoBackgroundGeolocation.geofence.payload"
+    private let geofenceRegionPrefix = "CapgoBackgroundGeolocation.geofence.region."
 
     // Earth radius in meters for distance calculations
     private static let earthRadiusMeters: Double = 6371000.0
 
     @objc override public func load() {
         UIDevice.current.isBatteryMonitoringEnabled = true
+        restoreGeofenceConfiguration()
+        DispatchQueue.main.async {
+            _ = self.ensureGeofenceLocationManager()
+        }
     }
 
     @objc func start(_ call: CAPPluginCall) {
@@ -225,6 +247,262 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         }
     }
 
+    @objc func setupGeofencing(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            if self.pendingGeofenceSetupCall != nil {
+                return call.reject("A geofence permission request is already in progress", "PERMISSION_REQUEST_IN_PROGRESS")
+            }
+            guard CLLocationManager.isMonitoringAvailable(for: CLCircularRegion.self) else {
+                return call.reject("Geofencing is not available on this device", "NOT_AVAILABLE")
+            }
+            var backendUrl: URL?
+            if let urlString = call.getString("url"), !urlString.isEmpty {
+                guard let url = URL(string: urlString), url.scheme != nil else {
+                    return call.reject("Given url is not valid")
+                }
+                backendUrl = url
+            }
+            let payload = call.getObject("payload") ?? [:]
+            guard JSONSerialization.isValidJSONObject(payload) else {
+                return call.reject("Payload must be valid JSON")
+            }
+
+            self.geofenceBackendUrl = backendUrl
+            self.geofenceNotifyOnEntry = call.getBool("notifyOnEntry") ?? true
+            self.geofenceNotifyOnExit = call.getBool("notifyOnExit") ?? true
+            self.geofencePayload = payload
+            self.persistGeofenceConfiguration()
+
+            let manager = self.ensureGeofenceLocationManager()
+            let status = manager.authorizationStatus
+            if status == .authorizedAlways {
+                return call.resolve()
+            }
+            if call.getBool("requestPermissions") == false {
+                return call.reject("Always location permission is required for geofencing", "NOT_AUTHORIZED")
+            }
+            if [.denied, .restricted].contains(status) {
+                return call.reject("Always location permission is required for geofencing", "NOT_AUTHORIZED")
+            }
+            self.pendingGeofenceSetupCall = call
+            manager.requestAlwaysAuthorization()
+        }
+    }
+
+    @objc func addGeofence(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            let manager = self.ensureGeofenceLocationManager()
+            guard self.geofenceAvailable(manager) else {
+                return call.reject("Always location permission is required for geofencing", "NOT_AUTHORIZED")
+            }
+            guard let latitude = call.getDouble("latitude") else {
+                return call.reject("Latitude is required")
+            }
+            guard let longitude = call.getDouble("longitude") else {
+                return call.reject("Longitude is required")
+            }
+            guard let identifier = call.getString("identifier"), !identifier.isEmpty else {
+                return call.reject("Identifier is required")
+            }
+            let radius = call.getDouble("radius") ?? 50.0
+            guard CLLocationCoordinate2DIsValid(CLLocationCoordinate2D(latitude: latitude, longitude: longitude)) else {
+                return call.reject("Invalid latitude or longitude")
+            }
+            guard radius > 0 else {
+                return call.reject("Radius must be greater than 0")
+            }
+            let maximumDistance = manager.maximumRegionMonitoringDistance
+            guard maximumDistance <= 0 || radius <= maximumDistance else {
+                return call.reject("Radius exceeds the maximum supported region monitoring distance")
+            }
+            let notifyOnEntry = call.getBool("notifyOnEntry") ?? self.geofenceNotifyOnEntry
+            let notifyOnExit = call.getBool("notifyOnExit") ?? self.geofenceNotifyOnExit
+            guard notifyOnEntry || notifyOnExit else {
+                return call.reject("At least one transition must be enabled")
+            }
+            let payload = call.getObject("payload") ?? [:]
+            guard JSONSerialization.isValidJSONObject(payload) else {
+                return call.reject("Payload must be valid JSON")
+            }
+
+            let center = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
+            let region = CLCircularRegion(center: center, radius: radius, identifier: identifier)
+            region.notifyOnEntry = notifyOnEntry
+            region.notifyOnExit = notifyOnExit
+            manager.startMonitoring(for: region)
+            self.persistGeofenceRegion(region, payload: payload)
+            call.resolve()
+        }
+    }
+
+    @objc func removeGeofence(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard let identifier = call.getString("identifier"), !identifier.isEmpty else {
+                return call.reject("Identifier is required")
+            }
+            let manager = self.ensureGeofenceLocationManager()
+            guard let region = manager.monitoredRegions.first(where: { $0.identifier == identifier }) else {
+                return call.reject("Could not find a region with that identifier", "NOT_FOUND")
+            }
+            manager.stopMonitoring(for: region)
+            self.removePersistedGeofenceRegion(identifier)
+            self.lastGeofenceTransition.removeValue(forKey: identifier)
+            call.resolve()
+        }
+    }
+
+    @objc func removeAllGeofences(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            let manager = self.ensureGeofenceLocationManager()
+            for region in manager.monitoredRegions where region is CLCircularRegion {
+                manager.stopMonitoring(for: region)
+                self.removePersistedGeofenceRegion(region.identifier)
+            }
+            self.lastGeofenceTransition.removeAll()
+            call.resolve()
+        }
+    }
+
+    @objc func getMonitoredGeofences(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            let manager = self.ensureGeofenceLocationManager()
+            let regions = manager.monitoredRegions.compactMap { region -> String? in
+                region is CLCircularRegion ? region.identifier : nil
+            }
+            call.resolve(["regions": regions])
+        }
+    }
+
+    private func ensureGeofenceLocationManager() -> CLLocationManager {
+        if let manager = geofenceLocationManager {
+            return manager
+        }
+        let manager = CLLocationManager()
+        manager.delegate = self
+        manager.pausesLocationUpdatesAutomatically = false
+        geofenceLocationManager = manager
+        return manager
+    }
+
+    private func geofenceAvailable(_ manager: CLLocationManager) -> Bool {
+        CLLocationManager.isMonitoringAvailable(for: CLCircularRegion.self) && manager.authorizationStatus == .authorizedAlways
+    }
+
+    private func persistGeofenceConfiguration() {
+        let defaults = UserDefaults.standard
+        defaults.set(geofenceBackendUrl?.absoluteString, forKey: geofenceUrlKey)
+        defaults.set(geofenceNotifyOnEntry, forKey: geofenceNotifyOnEntryKey)
+        defaults.set(geofenceNotifyOnExit, forKey: geofenceNotifyOnExitKey)
+        if JSONSerialization.isValidJSONObject(geofencePayload),
+           let data = try? JSONSerialization.data(withJSONObject: geofencePayload) {
+            defaults.set(data, forKey: geofencePayloadKey)
+        } else {
+            defaults.removeObject(forKey: geofencePayloadKey)
+        }
+    }
+
+    private func restoreGeofenceConfiguration() {
+        let defaults = UserDefaults.standard
+        if let urlString = defaults.string(forKey: geofenceUrlKey), !urlString.isEmpty {
+            geofenceBackendUrl = URL(string: urlString)
+        }
+        if defaults.object(forKey: geofenceNotifyOnEntryKey) != nil {
+            geofenceNotifyOnEntry = defaults.bool(forKey: geofenceNotifyOnEntryKey)
+        }
+        if defaults.object(forKey: geofenceNotifyOnExitKey) != nil {
+            geofenceNotifyOnExit = defaults.bool(forKey: geofenceNotifyOnExitKey)
+        }
+        if let data = defaults.data(forKey: geofencePayloadKey),
+           let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            geofencePayload = payload
+        }
+    }
+
+    private func persistGeofenceRegion(_ region: CLCircularRegion, payload: [String: Any]) {
+        let data: [String: Any] = [
+            "latitude": region.center.latitude,
+            "longitude": region.center.longitude,
+            "radius": region.radius,
+            "payload": payload
+        ]
+        if JSONSerialization.isValidJSONObject(data),
+           let encoded = try? JSONSerialization.data(withJSONObject: data) {
+            UserDefaults.standard.set(encoded, forKey: geofenceRegionPrefix + region.identifier)
+        }
+    }
+
+    private func persistedGeofenceRegion(_ identifier: String) -> [String: Any] {
+        guard let data = UserDefaults.standard.data(forKey: geofenceRegionPrefix + identifier),
+              let decoded = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return [:]
+        }
+        return decoded
+    }
+
+    private func removePersistedGeofenceRegion(_ identifier: String) {
+        UserDefaults.standard.removeObject(forKey: geofenceRegionPrefix + identifier)
+    }
+
+    private func geofenceTransitionData(for region: CLRegion, enter: Bool) -> [String: Any] {
+        let persistedRegion = persistedGeofenceRegion(region.identifier)
+        let regionPayload = persistedRegion["payload"] as? [String: Any] ?? [:]
+        var payload = geofencePayload
+        for (key, value) in regionPayload {
+            payload[key] = value
+        }
+
+        var data = payload
+        data["identifier"] = region.identifier
+        data["transition"] = enter ? "enter" : "exit"
+        data["enter"] = enter
+        if let circularRegion = region as? CLCircularRegion {
+            data["latitude"] = circularRegion.center.latitude
+            data["longitude"] = circularRegion.center.longitude
+            data["radius"] = circularRegion.radius
+        } else {
+            data["latitude"] = persistedRegion["latitude"]
+            data["longitude"] = persistedRegion["longitude"]
+            data["radius"] = persistedRegion["radius"]
+        }
+        data["payload"] = payload
+        return data
+    }
+
+    private func handleGeofenceTransition(for region: CLRegion, enter: Bool) {
+        if let circularRegion = region as? CLCircularRegion {
+            if enter && !circularRegion.notifyOnEntry {
+                return
+            }
+            if !enter && !circularRegion.notifyOnExit {
+                return
+            }
+        }
+
+        let transition = enter ? "enter" : "exit"
+        if lastGeofenceTransition[region.identifier] == transition {
+            return
+        }
+        lastGeofenceTransition[region.identifier] = transition
+
+        let data = geofenceTransitionData(for: region, enter: enter)
+        notifyListeners("geofenceTransition", data: data, retainUntilConsumed: true)
+        postGeofenceTransition(data)
+    }
+
+    private func postGeofenceTransition(_ data: [String: Any]) {
+        guard let backendUrl = geofenceBackendUrl,
+              JSONSerialization.isValidJSONObject(data),
+              let body = try? JSONSerialization.data(withJSONObject: data) else {
+            return
+        }
+        var request = URLRequest(url: backendUrl)
+        request.httpMethod = "POST"
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.addValue("application/json", forHTTPHeaderField: "Accept")
+        request.httpBody = body
+        URLSession.shared.dataTask(with: request).resume()
+    }
+
     private func startUpdatingLocation() {
         // Avoid unnecessary calls to startUpdatingLocation, which can
         // result in extraneous invocations of didFailWithError.
@@ -353,7 +631,8 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         _ manager: CLLocationManager,
         didFailWithError error: Error
     ) {
-        guard let callbackId = activeCallbackId,
+        guard manager === locationManager,
+              let callbackId = activeCallbackId,
               let call = self.bridge?.savedCall(withID: callbackId) else {
             return
         }
@@ -378,7 +657,8 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         _ manager: CLLocationManager,
         didUpdateLocations locations: [CLLocation]
     ) {
-        guard let location = locations.last,
+        guard manager === locationManager,
+              let location = locations.last,
               let callbackId = activeCallbackId,
               let call = self.bridge?.savedCall(withID: callbackId) else {
             return
@@ -394,11 +674,55 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         _ manager: CLLocationManager,
         didChangeAuthorization status: CLAuthorizationStatus
     ) {
+        if let pendingCall = pendingGeofenceSetupCall {
+            if status == .authorizedAlways {
+                pendingGeofenceSetupCall = nil
+                pendingCall.resolve()
+            } else if status == .denied || status == .restricted || status == .authorizedWhenInUse {
+                pendingGeofenceSetupCall = nil
+                pendingCall.reject("Always location permission is required for geofencing", "NOT_AUTHORIZED")
+            }
+        }
+
         // If this method is called before the user decides on a permission, as
         // it is on iOS 14 when the permissions dialog is presented, we ignore
         // it.
-        if status != .notDetermined {
+        if manager === locationManager && status != .notDetermined {
             startUpdatingLocation()
+        }
+    }
+
+    public func locationManager(_ manager: CLLocationManager, didStartMonitoringFor region: CLRegion) {
+        guard manager === geofenceLocationManager else { return }
+        manager.requestState(for: region)
+    }
+
+    public func locationManager(_ manager: CLLocationManager, monitoringDidFailFor region: CLRegion?, withError error: Error) {
+        guard manager === geofenceLocationManager, let region = region else { return }
+        notifyListeners(
+            "geofenceTransition",
+            data: [
+                "identifier": region.identifier,
+                "error": error.localizedDescription
+            ],
+            retainUntilConsumed: true
+        )
+    }
+
+    public func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
+        guard manager === geofenceLocationManager, region is CLCircularRegion else { return }
+        handleGeofenceTransition(for: region, enter: true)
+    }
+
+    public func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
+        guard manager === geofenceLocationManager, region is CLCircularRegion else { return }
+        handleGeofenceTransition(for: region, enter: false)
+    }
+
+    public func locationManager(_ manager: CLLocationManager, didDetermineState state: CLRegionState, for region: CLRegion) {
+        guard manager === geofenceLocationManager, region is CLCircularRegion else { return }
+        if state == .inside {
+            handleGeofenceTransition(for: region, enter: true)
         }
     }
 

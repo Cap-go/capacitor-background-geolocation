@@ -1,3 +1,5 @@
+import type { PluginListenerHandle } from '@capacitor/core';
+
 /**
  * The options for configuring for location updates.
  *
@@ -196,6 +198,219 @@ export interface SetPlannedRouteOptions {
 }
 
 /**
+ * Options for configuring native geofence transition handling.
+ *
+ * When `url` is provided, native iOS and Android code sends a JSON `POST`
+ * whenever a monitored region is entered or exited. This keeps geofence
+ * handling useful when the WebView is suspended.
+ *
+ * @since 8.0.30
+ */
+export interface GeofenceSetupOptions {
+  /**
+   * Endpoint that receives geofence transition payloads.
+   *
+   * @since 8.0.30
+   * @example "https://api.example.com/geofences"
+   */
+  url?: string;
+
+  /**
+   * Whether entry transitions should be monitored.
+   *
+   * @since 8.0.30
+   * @default true
+   * @example true
+   */
+  notifyOnEntry?: boolean;
+
+  /**
+   * Whether exit transitions should be monitored.
+   *
+   * @since 8.0.30
+   * @default true
+   * @example true
+   */
+  notifyOnExit?: boolean;
+
+  /**
+   * Base JSON payload merged into every native transition POST and listener event.
+   *
+   * @since 8.0.30
+   * @example { "userId": "123" }
+   */
+  payload?: Record<string, unknown>;
+
+  /**
+   * Whether the plugin should request the native location permission needed for geofencing.
+   *
+   * iOS geofencing needs Always location authorization. Android background geofencing
+   * needs foreground location and, on Android 10+, background location permission.
+   *
+   * @since 8.0.30
+   * @default true
+   * @example true
+   */
+  requestPermissions?: boolean;
+}
+
+/**
+ * A circular geofence region.
+ *
+ * @since 8.0.30
+ */
+export interface AddGeofenceOptions {
+  /**
+   * Latitude in degrees for the region center.
+   *
+   * @since 8.0.30
+   * @example 40.7128
+   */
+  latitude: number;
+
+  /**
+   * Longitude in degrees for the region center.
+   *
+   * @since 8.0.30
+   * @example -74.006
+   */
+  longitude: number;
+
+  /**
+   * Region radius in meters.
+   *
+   * @since 8.0.30
+   * @default 50
+   * @example 150
+   */
+  radius?: number;
+
+  /**
+   * Stable identifier for the geofence.
+   *
+   * @since 8.0.30
+   * @example "office"
+   */
+  identifier: string;
+
+  /**
+   * Overrides the setup-level entry setting for this region.
+   *
+   * @since 8.0.30
+   */
+  notifyOnEntry?: boolean;
+
+  /**
+   * Overrides the setup-level exit setting for this region.
+   *
+   * @since 8.0.30
+   */
+  notifyOnExit?: boolean;
+
+  /**
+   * Region-specific payload merged over the setup payload.
+   *
+   * @since 8.0.30
+   * @example { "storeId": "nyc-1" }
+   */
+  payload?: Record<string, unknown>;
+}
+
+/**
+ * Options for removing a monitored geofence.
+ *
+ * @since 8.0.30
+ */
+export interface RemoveGeofenceOptions {
+  /**
+   * Identifier passed to `addGeofence`.
+   *
+   * @since 8.0.30
+   * @example "office"
+   */
+  identifier: string;
+}
+
+/**
+ * Result returned when listing monitored geofences.
+ *
+ * @since 8.0.30
+ */
+export interface MonitoredGeofencesResult {
+  /**
+   * Identifiers for all geofences currently monitored by this plugin.
+   *
+   * @since 8.0.30
+   * @example ["office", "warehouse"]
+   */
+  regions: string[];
+}
+
+/**
+ * Event emitted when a monitored geofence is entered or exited.
+ *
+ * The same data is also sent to the configured `url`, when one is set.
+ *
+ * @since 8.0.30
+ */
+export interface GeofenceTransitionEvent {
+  /**
+   * Identifier of the geofence that changed state.
+   *
+   * @since 8.0.30
+   * @example "office"
+   */
+  identifier: string;
+
+  /**
+   * Transition name.
+   *
+   * @since 8.0.30
+   * @example "enter"
+   */
+  transition: 'enter' | 'exit';
+
+  /**
+   * `true` for entry transitions, `false` for exit transitions.
+   *
+   * @since 8.0.30
+   * @example true
+   */
+  enter: boolean;
+
+  /**
+   * Latitude in degrees for the monitored region center, when available.
+   *
+   * @since 8.0.30
+   * @example 40.7128
+   */
+  latitude?: number;
+
+  /**
+   * Longitude in degrees for the monitored region center, when available.
+   *
+   * @since 8.0.30
+   * @example -74.006
+   */
+  longitude?: number;
+
+  /**
+   * Region radius in meters, when available.
+   *
+   * @since 8.0.30
+   * @example 150
+   */
+  radius?: number;
+
+  /**
+   * Merged setup and region payload.
+   *
+   * @since 8.0.30
+   */
+  payload?: Record<string, unknown>;
+}
+
+/**
  * Main plugin interface for background geolocation functionality.
  * Provides methods to manage location updates and access device settings.
  *
@@ -273,6 +488,95 @@ export interface BackgroundGeolocationPlugin {
    * });
    */
   setPlannedRoute(options: SetPlannedRouteOptions): Promise<void>;
+
+  /**
+   * Configures native geofence transition handling.
+   *
+   * Call this before adding geofences when you need native background POSTs
+   * or default entry/exit settings.
+   *
+   * @param options The geofence configuration options
+   * @returns A promise that resolves once geofencing is configured
+   *
+   * @since 8.0.30
+   * @example
+   * await BackgroundGeolocation.setupGeofencing({
+   *   url: "https://api.example.com/geofences",
+   *   notifyOnEntry: true,
+   *   notifyOnExit: true,
+   *   payload: { userId: "123" }
+   * });
+   */
+  setupGeofencing(options: GeofenceSetupOptions): Promise<void>;
+
+  /**
+   * Starts monitoring a circular native geofence.
+   *
+   * @param options The geofence region options
+   * @returns A promise that resolves when native monitoring starts
+   *
+   * @since 8.0.30
+   * @example
+   * await BackgroundGeolocation.addGeofence({
+   *   identifier: "office",
+   *   latitude: 40.7128,
+   *   longitude: -74.006,
+   *   radius: 150
+   * });
+   */
+  addGeofence(options: AddGeofenceOptions): Promise<void>;
+
+  /**
+   * Stops monitoring one geofence.
+   *
+   * @param options The geofence identifier
+   * @returns A promise that resolves when native monitoring stops
+   *
+   * @since 8.0.30
+   * @example
+   * await BackgroundGeolocation.removeGeofence({ identifier: "office" });
+   */
+  removeGeofence(options: RemoveGeofenceOptions): Promise<void>;
+
+  /**
+   * Stops monitoring every geofence registered by this plugin.
+   *
+   * @returns A promise that resolves when all native geofences are removed
+   *
+   * @since 8.0.30
+   * @example
+   * await BackgroundGeolocation.removeAllGeofences();
+   */
+  removeAllGeofences(): Promise<void>;
+
+  /**
+   * Lists the geofence identifiers currently monitored by this plugin.
+   *
+   * @returns A promise with monitored geofence identifiers
+   *
+   * @since 8.0.30
+   * @example
+   * const { regions } = await BackgroundGeolocation.getMonitoredGeofences();
+   */
+  getMonitoredGeofences(): Promise<MonitoredGeofencesResult>;
+
+  /**
+   * Listens for geofence enter/exit transitions while the WebView is alive.
+   *
+   * Native `url` delivery configured through `setupGeofencing` is used for
+   * background-safe delivery.
+   *
+   * @since 8.0.30
+   * @example
+   * const handle = await BackgroundGeolocation.addListener(
+   *   "geofenceTransition",
+   *   (event) => console.log(event.identifier, event.transition)
+   * );
+   */
+  addListener(
+    eventName: 'geofenceTransition',
+    listenerFunc: (event: GeofenceTransitionEvent) => void,
+  ): Promise<PluginListenerHandle>;
 
   /**
    * Get the native Capacitor plugin version

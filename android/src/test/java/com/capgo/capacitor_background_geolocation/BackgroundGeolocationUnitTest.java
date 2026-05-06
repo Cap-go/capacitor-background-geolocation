@@ -31,6 +31,12 @@ public class BackgroundGeolocationUnitTest {
 
             Class<?> serviceClass = Class.forName("com.capgo.capacitor_background_geolocation.BackgroundGeolocationService");
             assertNotNull("BackgroundGeolocationService class should exist", serviceClass);
+
+            Class<?> receiverClass = Class.forName("com.capgo.capacitor_background_geolocation.GeofenceBroadcastReceiver");
+            assertNotNull("GeofenceBroadcastReceiver class should exist", receiverClass);
+
+            Class<?> storeClass = Class.forName("com.capgo.capacitor_background_geolocation.GeofenceStore");
+            assertNotNull("GeofenceStore class should exist", storeClass);
         } catch (ClassNotFoundException e) {
             fail("Plugin classes should exist: " + e.getMessage());
         }
