@@ -68,6 +68,8 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     private var geofenceNotifyOnExit: Bool = true
     private var geofencePayload: [String: Any] = [:]
     private var pendingGeofenceSetupCall: CAPPluginCall?
+    private var pendingGeofenceAddCalls: [String: CAPPluginCall] = [:]
+    private var pendingGeofenceRegions: [String: (region: CLCircularRegion, payload: [String: Any])] = [:]
     private var lastGeofenceTransition: [String: String] = [:]
 
     private let geofenceUrlKey = "CapgoBackgroundGeolocation.geofence.url"
@@ -327,13 +329,17 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
                 return call.reject("Payload must be valid JSON")
             }
 
+            guard self.pendingGeofenceAddCalls[identifier] == nil else {
+                return call.reject("A geofence with that identifier is already being added", "PENDING")
+            }
+
             let center = CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
             let region = CLCircularRegion(center: center, radius: radius, identifier: identifier)
             region.notifyOnEntry = notifyOnEntry
             region.notifyOnExit = notifyOnExit
+            self.pendingGeofenceAddCalls[identifier] = call
+            self.pendingGeofenceRegions[identifier] = (region, payload)
             manager.startMonitoring(for: region)
-            self.persistGeofenceRegion(region, payload: payload)
-            call.resolve()
         }
     }
 
@@ -347,11 +353,15 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
                 return call.reject("Could not find a region with that identifier", "NOT_FOUND")
             }
             guard let region = manager.monitoredRegions.first(where: { $0.identifier == identifier && $0 is CLCircularRegion }) else {
+                self.pendingGeofenceAddCalls.removeValue(forKey: identifier)?.reject("Geofence was removed before monitoring started", "CANCELLED")
+                self.pendingGeofenceRegions.removeValue(forKey: identifier)
                 self.removePersistedGeofenceRegion(identifier)
                 self.lastGeofenceTransition.removeValue(forKey: identifier)
                 return call.resolve()
             }
             manager.stopMonitoring(for: region)
+            self.pendingGeofenceAddCalls.removeValue(forKey: identifier)?.reject("Geofence was removed before monitoring started", "CANCELLED")
+            self.pendingGeofenceRegions.removeValue(forKey: identifier)
             self.removePersistedGeofenceRegion(identifier)
             self.lastGeofenceTransition.removeValue(forKey: identifier)
             call.resolve()
@@ -369,6 +379,11 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
                 self.removePersistedGeofenceRegion(identifier)
                 self.lastGeofenceTransition.removeValue(forKey: identifier)
             }
+            for (_, pendingCall) in self.pendingGeofenceAddCalls {
+                pendingCall.reject("Geofences were removed before monitoring started", "CANCELLED")
+            }
+            self.pendingGeofenceAddCalls.removeAll()
+            self.pendingGeofenceRegions.removeAll()
             call.resolve()
         }
     }
@@ -725,11 +740,22 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
 
     public func locationManager(_ manager: CLLocationManager, didStartMonitoringFor region: CLRegion) {
         guard manager === geofenceLocationManager else { return }
+        if let pending = pendingGeofenceRegions.removeValue(forKey: region.identifier) {
+            persistGeofenceRegion(pending.region, payload: pending.payload)
+            pendingGeofenceAddCalls.removeValue(forKey: region.identifier)?.resolve()
+        }
         manager.requestState(for: region)
     }
 
     public func locationManager(_ manager: CLLocationManager, monitoringDidFailFor region: CLRegion?, withError error: Error) {
         guard manager === geofenceLocationManager, let region = region else { return }
+        pendingGeofenceRegions.removeValue(forKey: region.identifier)
+        removePersistedGeofenceRegion(region.identifier)
+        pendingGeofenceAddCalls.removeValue(forKey: region.identifier)?.reject(
+            "Could not start monitoring the geofence",
+            "MONITORING_FAILED",
+            error
+        )
         let nsError = error as NSError
         notifyListeners(
             "geofenceError",

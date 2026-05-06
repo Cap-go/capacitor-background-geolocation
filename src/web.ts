@@ -184,7 +184,7 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
   }
 
   private startGeofenceWatch(): void {
-    if (this.geofenceWatchId || this.geofences.size === 0 || !navigator.geolocation) {
+    if (this.geofenceWatchId !== undefined || this.geofences.size === 0 || !navigator.geolocation) {
       return;
     }
     this.geofenceWatchId = navigator.geolocation.watchPosition(
@@ -199,11 +199,11 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
   }
 
   private stopGeofenceWatchIfIdle(): void {
-    if (this.geofences.size > 0 || !this.geofenceWatchId) {
+    if (this.geofences.size > 0 || this.geofenceWatchId === undefined) {
       return;
     }
     navigator.geolocation.clearWatch(this.geofenceWatchId);
-    delete this.geofenceWatchId;
+    this.geofenceWatchId = undefined;
   }
 
   private checkGeofences(latitude: number, longitude: number): void {
