@@ -23,6 +23,9 @@ public class GeofenceBroadcastReceiver extends BroadcastReceiver {
             int errorCode = event.getErrorCode();
             String message = GeofenceStatusCodes.getStatusCodeString(errorCode);
             Logger.error("Geofence event failed with code: " + errorCode);
+            if (shouldClearStoredRegions(errorCode)) {
+                GeofenceStore.clearRegions(context);
+            }
             try {
                 JSONObject data = new JSONObject();
                 data.put("code", errorCode);
@@ -58,5 +61,9 @@ public class GeofenceBroadcastReceiver extends BroadcastReceiver {
         } catch (Exception exception) {
             Logger.error("Failed to handle geofence transition", exception);
         }
+    }
+
+    static boolean shouldClearStoredRegions(int errorCode) {
+        return errorCode == GeofenceStatusCodes.GEOFENCE_NOT_AVAILABLE;
     }
 }

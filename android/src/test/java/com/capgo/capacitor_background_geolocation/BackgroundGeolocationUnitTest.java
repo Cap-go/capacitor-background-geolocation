@@ -3,6 +3,7 @@ package com.capgo.capacitor_background_geolocation;
 import static org.junit.Assert.*;
 
 import android.location.Location;
+import com.google.android.gms.location.GeofenceStatusCodes;
 import org.junit.Test;
 
 /**
@@ -40,6 +41,18 @@ public class BackgroundGeolocationUnitTest {
         } catch (ClassNotFoundException e) {
             fail("Plugin classes should exist: " + e.getMessage());
         }
+    }
+
+    @Test
+    public void testGeofenceResetErrorClearsStoredRegions() {
+        assertTrue(
+            "GEOFENCE_NOT_AVAILABLE should clear stale cached geofences",
+            GeofenceBroadcastReceiver.shouldClearStoredRegions(GeofenceStatusCodes.GEOFENCE_NOT_AVAILABLE)
+        );
+        assertFalse(
+            "Other geofence errors should preserve cached regions",
+            GeofenceBroadcastReceiver.shouldClearStoredRegions(GeofenceStatusCodes.GEOFENCE_TOO_MANY_GEOFENCES)
+        );
     }
 
     @Test
