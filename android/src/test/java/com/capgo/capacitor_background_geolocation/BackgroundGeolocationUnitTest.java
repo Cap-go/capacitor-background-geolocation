@@ -2,7 +2,9 @@ package com.capgo.capacitor_background_geolocation;
 
 import static org.junit.Assert.*;
 
+import android.content.Intent;
 import android.location.Location;
+import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofenceStatusCodes;
 import org.junit.Test;
 
@@ -38,6 +40,9 @@ public class BackgroundGeolocationUnitTest {
 
             Class<?> storeClass = Class.forName("com.capgo.capacitor_background_geolocation.GeofenceStore");
             assertNotNull("GeofenceStore class should exist", storeClass);
+
+            Class<?> bootReceiverClass = Class.forName("com.capgo.capacitor_background_geolocation.GeofenceBootReceiver");
+            assertNotNull("GeofenceBootReceiver class should exist", bootReceiverClass);
         } catch (ClassNotFoundException e) {
             fail("Plugin classes should exist: " + e.getMessage());
         }
@@ -53,6 +58,29 @@ public class BackgroundGeolocationUnitTest {
             "Other geofence errors should preserve cached regions",
             GeofenceBroadcastReceiver.shouldClearStoredRegions(GeofenceStatusCodes.GEOFENCE_TOO_MANY_GEOFENCES)
         );
+    }
+
+    @Test
+    public void testGeofenceBootReceiverRestoreActions() {
+        assertTrue(
+            "BOOT_COMPLETED should restore persisted geofences",
+            GeofenceBootReceiver.shouldRestoreAction(Intent.ACTION_BOOT_COMPLETED)
+        );
+        assertTrue(
+            "MY_PACKAGE_REPLACED should restore persisted geofences",
+            GeofenceBootReceiver.shouldRestoreAction(Intent.ACTION_MY_PACKAGE_REPLACED)
+        );
+        assertFalse("Other actions should be ignored", GeofenceBootReceiver.shouldRestoreAction(Intent.ACTION_AIRPLANE_MODE_CHANGED));
+    }
+
+    @Test
+    public void testGeofenceTransitionTypes() throws Exception {
+        assertEquals(
+            Geofence.GEOFENCE_TRANSITION_ENTER | Geofence.GEOFENCE_TRANSITION_EXIT,
+            GeofenceStore.geofenceTransitionTypes(true, true)
+        );
+        assertEquals(Geofence.GEOFENCE_TRANSITION_ENTER, GeofenceStore.geofenceTransitionTypes(true, false));
+        assertEquals(Geofence.GEOFENCE_TRANSITION_EXIT, GeofenceStore.geofenceTransitionTypes(false, true));
     }
 
     @Test

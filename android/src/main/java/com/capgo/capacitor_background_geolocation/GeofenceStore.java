@@ -9,6 +9,8 @@ import androidx.work.OneTimeWorkRequest;
 import androidx.work.WorkManager;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Logger;
+import com.google.android.gms.location.Geofence;
+import com.google.android.gms.location.GeofencingRequest;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -107,6 +109,39 @@ final class GeofenceStore {
 
     static JSONObject getRegion(Context context, String identifier) {
         return jsonFromString(prefs(context).getString(KEY_REGION_PREFIX + identifier, null));
+    }
+
+    static GeofencingRequest buildGeofencingRequest(JSONObject region) throws JSONException {
+        String identifier = region.getString("identifier");
+        double latitude = region.getDouble("latitude");
+        double longitude = region.getDouble("longitude");
+        float radius = (float) region.getDouble("radius");
+        boolean notifyOnEntry = region.optBoolean("notifyOnEntry", true);
+        boolean notifyOnExit = region.optBoolean("notifyOnExit", true);
+
+        int transitionTypes = geofenceTransitionTypes(notifyOnEntry, notifyOnExit);
+        int initialTrigger = notifyOnEntry ? GeofencingRequest.INITIAL_TRIGGER_ENTER : 0;
+        Geofence geofence = new Geofence.Builder()
+            .setRequestId(identifier)
+            .setCircularRegion(latitude, longitude, radius)
+            .setTransitionTypes(transitionTypes)
+            .setExpirationDuration(Geofence.NEVER_EXPIRE)
+            .build();
+        return new GeofencingRequest.Builder().setInitialTrigger(initialTrigger).addGeofence(geofence).build();
+    }
+
+    static int geofenceTransitionTypes(boolean notifyOnEntry, boolean notifyOnExit) throws JSONException {
+        int transitionTypes = 0;
+        if (notifyOnEntry) {
+            transitionTypes |= Geofence.GEOFENCE_TRANSITION_ENTER;
+        }
+        if (notifyOnExit) {
+            transitionTypes |= Geofence.GEOFENCE_TRANSITION_EXIT;
+        }
+        if (transitionTypes == 0) {
+            throw new JSONException("At least one transition must be enabled");
+        }
+        return transitionTypes;
     }
 
     static JSONObject buildTransitionData(Context context, String identifier, boolean enter) throws JSONException {

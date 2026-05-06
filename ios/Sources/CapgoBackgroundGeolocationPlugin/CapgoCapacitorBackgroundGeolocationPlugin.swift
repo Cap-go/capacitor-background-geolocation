@@ -372,6 +372,16 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
                 return call.reject("Identifier is required")
             }
             let manager = self.ensureGeofenceLocationManager()
+            if let pending = self.pendingGeofenceRegions.removeValue(forKey: identifier) {
+                manager.stopMonitoring(for: pending.region)
+                self.pendingGeofenceAddCalls.removeValue(forKey: identifier)?.reject(
+                    "Geofence was removed before monitoring started",
+                    "CANCELLED"
+                )
+                self.removePersistedGeofenceRegion(identifier)
+                self.lastGeofenceTransition.removeValue(forKey: identifier)
+                return call.resolve()
+            }
             guard self.persistedGeofenceRegionIds().contains(identifier) else {
                 return call.reject("Could not find a region with that identifier", "NOT_FOUND")
             }

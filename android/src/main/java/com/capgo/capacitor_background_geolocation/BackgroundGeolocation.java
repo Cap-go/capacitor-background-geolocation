@@ -3,7 +3,6 @@ package com.capgo.capacitor_background_geolocation;
 import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -50,8 +49,6 @@ import org.json.JSONObject;
     }
 )
 public class BackgroundGeolocation extends Plugin {
-
-    private static final int GEOFENCE_PENDING_INTENT_REQUEST_CODE = 83620;
 
     private final String pluginVersion = "";
 
@@ -439,14 +436,8 @@ public class BackgroundGeolocation extends Plugin {
         return LocationServices.getGeofencingClient(getContext());
     }
 
-    private PendingIntent getGeofencePendingIntent() {
-        Intent intent = new Intent(getContext(), GeofenceBroadcastReceiver.class);
-        intent.setPackage(getContext().getPackageName());
-        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            flags |= PendingIntent.FLAG_MUTABLE;
-        }
-        return PendingIntent.getBroadcast(getContext(), GEOFENCE_PENDING_INTENT_REQUEST_CODE, intent, flags);
+    private android.app.PendingIntent getGeofencePendingIntent() {
+        return GeofenceBroadcastReceiver.createPendingIntent(getContext());
     }
 
     private static double[][] getJavaDoubleArray(JSArray jsArray) throws JSONException {
