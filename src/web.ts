@@ -6,16 +6,38 @@ import type {
   Location,
   CallbackError,
   SetPlannedRouteOptions,
+  GeofenceSetupOptions,
+  AddGeofenceOptions,
+  RemoveGeofenceOptions,
+  MonitoredGeofencesResult,
+  GeofenceTransitionEvent,
 } from './definitions';
+
+interface WebGeofence {
+  latitude: number;
+  longitude: number;
+  radius: number;
+  identifier: string;
+  notifyOnEntry: boolean;
+  notifyOnExit: boolean;
+  payload?: Record<string, unknown>;
+  inside?: boolean;
+}
 
 export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeolocationPlugin {
   private static readonly EARTH_RADIUS_M = 6371000;
 
   private watchId: number | undefined;
+  private geofenceWatchId: number | undefined;
   private plannedRoute: [number, number][] = [];
   private audio: HTMLAudioElement | undefined;
   private isOffRoute = true;
   private distanceThreshold = 50;
+  private geofences = new Map<string, WebGeofence>();
+  private geofenceUrl: string | undefined;
+  private geofencePayload: Record<string, unknown> = {};
+  private notifyOnEntry = true;
+  private notifyOnExit = true;
 
   async start(options: StartOptions, callback: (position?: Location, error?: CallbackError) => void): Promise<void> {
     if (!navigator.geolocation) {
@@ -57,6 +79,7 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
           }
           this.isOffRoute = offRoute;
         }
+        this.checkGeofences(position.coords.latitude, position.coords.longitude);
         callback(location);
       },
       (error) => {
@@ -99,6 +122,132 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
     this.audio = new Audio(options.soundFile);
     this.plannedRoute = options.route || [];
     this.distanceThreshold = options.distance || 50;
+  }
+
+  async setupGeofencing(options: GeofenceSetupOptions): Promise<void> {
+    if (options.url) {
+      new URL(options.url);
+    }
+    this.geofenceUrl = options.url;
+    this.notifyOnEntry = options.notifyOnEntry ?? true;
+    this.notifyOnExit = options.notifyOnExit ?? true;
+    this.geofencePayload = options.payload ?? {};
+  }
+
+  async addGeofence(options: AddGeofenceOptions): Promise<void> {
+    if (!navigator.geolocation) {
+      throw new Error('Geolocation is not supported by this browser');
+    }
+    this.validateGeofence(options.latitude, options.longitude, options.radius ?? 50, options.identifier);
+    this.geofences.set(options.identifier, {
+      latitude: options.latitude,
+      longitude: options.longitude,
+      radius: options.radius ?? 50,
+      identifier: options.identifier,
+      notifyOnEntry: options.notifyOnEntry ?? this.notifyOnEntry,
+      notifyOnExit: options.notifyOnExit ?? this.notifyOnExit,
+      payload: options.payload,
+    });
+    this.startGeofenceWatch();
+  }
+
+  async removeGeofence(options: RemoveGeofenceOptions): Promise<void> {
+    if (!options.identifier) {
+      throw new Error('Identifier is required');
+    }
+    this.geofences.delete(options.identifier);
+    this.stopGeofenceWatchIfIdle();
+  }
+
+  async removeAllGeofences(): Promise<void> {
+    this.geofences.clear();
+    this.stopGeofenceWatchIfIdle();
+  }
+
+  async getMonitoredGeofences(): Promise<MonitoredGeofencesResult> {
+    return { regions: Array.from(this.geofences.keys()) };
+  }
+
+  private validateGeofence(latitude: number, longitude: number, radius: number, identifier: string): void {
+    if (!identifier) {
+      throw new Error('Identifier is required');
+    }
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+      throw new Error('Latitude must be between -90 and 90');
+    }
+    if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      throw new Error('Longitude must be between -180 and 180');
+    }
+    if (!Number.isFinite(radius) || radius <= 0) {
+      throw new Error('Radius must be greater than 0');
+    }
+  }
+
+  private startGeofenceWatch(): void {
+    if (this.geofenceWatchId !== undefined || this.geofences.size === 0 || !navigator.geolocation) {
+      return;
+    }
+    this.geofenceWatchId = navigator.geolocation.watchPosition(
+      (position) => this.checkGeofences(position.coords.latitude, position.coords.longitude),
+      () => undefined,
+      {
+        enableHighAccuracy: false,
+        timeout: 30000,
+        maximumAge: 60000,
+      },
+    );
+  }
+
+  private stopGeofenceWatchIfIdle(): void {
+    if (this.geofences.size > 0 || this.geofenceWatchId === undefined) {
+      return;
+    }
+    navigator.geolocation.clearWatch(this.geofenceWatchId);
+    this.geofenceWatchId = undefined;
+  }
+
+  private checkGeofences(latitude: number, longitude: number): void {
+    const point: [number, number] = [longitude, latitude];
+    this.geofences.forEach((geofence) => {
+      const distance = this.haversine(point, [geofence.longitude, geofence.latitude]);
+      const inside = distance <= geofence.radius;
+      const previousInside = geofence.inside;
+      geofence.inside = inside;
+
+      if (inside && previousInside !== true && geofence.notifyOnEntry) {
+        this.emitGeofenceTransition(geofence, true);
+      } else if (!inside && previousInside === true && geofence.notifyOnExit) {
+        this.emitGeofenceTransition(geofence, false);
+      }
+    });
+  }
+
+  private emitGeofenceTransition(geofence: WebGeofence, enter: boolean): void {
+    const payload = {
+      ...this.geofencePayload,
+      ...(geofence.payload ?? {}),
+    };
+    const event: GeofenceTransitionEvent = {
+      ...payload,
+      identifier: geofence.identifier,
+      transition: enter ? 'enter' : 'exit',
+      enter,
+      latitude: geofence.latitude,
+      longitude: geofence.longitude,
+      radius: geofence.radius,
+      payload,
+    };
+    void this.notifyListeners('geofenceTransition', event);
+    if (this.geofenceUrl) {
+      void fetch(this.geofenceUrl, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(event),
+      }).catch(() => undefined);
+    }
   }
 
   private toRadians(degrees: number): number {
