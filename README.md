@@ -263,6 +263,7 @@ Configuration specific to Android can be made in `strings.xml`:
 * [`removeAllGeofences()`](#removeallgeofences)
 * [`getMonitoredGeofences()`](#getmonitoredgeofences)
 * [`addListener('geofenceTransition', ...)`](#addlistenergeofencetransition-)
+* [`addListener('geofenceError', ...)`](#addlistenergeofenceerror-)
 * [`getPluginVersion()`](#getpluginversion)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
@@ -445,6 +446,26 @@ background-safe delivery.
 --------------------
 
 
+### addListener('geofenceError', ...)
+
+```typescript
+addListener(eventName: 'geofenceError', listenerFunc: (event: GeofenceErrorEvent) => void) => Promise<PluginListenerHandle>
+```
+
+Listens for native geofence monitoring errors while the WebView is alive.
+
+| Param              | Type                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------- |
+| **`eventName`**    | <code>'geofenceError'</code>                                                          |
+| **`listenerFunc`** | <code>(event: <a href="#geofenceerrorevent">GeofenceErrorEvent</a>) =&gt; void</code> |
+
+**Returns:** <code>Promise&lt;<a href="#pluginlistenerhandle">PluginListenerHandle</a>&gt;</code>
+
+**Since:** 8.0.30
+
+--------------------
+
+
 ### getPluginVersion()
 
 ```typescript
@@ -583,6 +604,18 @@ The same data is also sent to the configured `url`, when one is set.
 | **`longitude`**  | <code>number</code>                                              | Longitude in degrees for the monitored region center, when available. | 8.0.30 |
 | **`radius`**     | <code>number</code>                                              | Region radius in meters, when available.                              | 8.0.30 |
 | **`payload`**    | <code><a href="#record">Record</a>&lt;string, unknown&gt;</code> | Merged setup and region payload.                                      | 8.0.30 |
+
+
+#### GeofenceErrorEvent
+
+Event emitted when native geofence monitoring fails.
+
+| Prop             | Type                | Description                                                          | Since  |
+| ---------------- | ------------------- | -------------------------------------------------------------------- | ------ |
+| **`identifier`** | <code>string</code> | Identifier of the geofence that failed, when native APIs provide it. | 8.0.30 |
+| **`code`**       | <code>number</code> | Native platform error code.                                          | 8.0.30 |
+| **`message`**    | <code>string</code> | Native platform error message.                                       | 8.0.30 |
+| **`domain`**     | <code>string</code> | Native error domain, when available.                                 | 8.0.30 |
 
 
 ### Type Aliases

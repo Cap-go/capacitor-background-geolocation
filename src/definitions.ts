@@ -411,6 +411,43 @@ export interface GeofenceTransitionEvent {
 }
 
 /**
+ * Event emitted when native geofence monitoring fails.
+ *
+ * @since 8.0.30
+ */
+export interface GeofenceErrorEvent {
+  /**
+   * Identifier of the geofence that failed, when native APIs provide it.
+   *
+   * @since 8.0.30
+   * @example "office"
+   */
+  identifier?: string;
+
+  /**
+   * Native platform error code.
+   *
+   * @since 8.0.30
+   * @example 5
+   */
+  code?: number;
+
+  /**
+   * Native platform error message.
+   *
+   * @since 8.0.30
+   */
+  message: string;
+
+  /**
+   * Native error domain, when available.
+   *
+   * @since 8.0.30
+   */
+  domain?: string;
+}
+
+/**
  * Main plugin interface for background geolocation functionality.
  * Provides methods to manage location updates and access device settings.
  *
@@ -576,6 +613,21 @@ export interface BackgroundGeolocationPlugin {
   addListener(
     eventName: 'geofenceTransition',
     listenerFunc: (event: GeofenceTransitionEvent) => void,
+  ): Promise<PluginListenerHandle>;
+
+  /**
+   * Listens for native geofence monitoring errors while the WebView is alive.
+   *
+   * @since 8.0.30
+   * @example
+   * const handle = await BackgroundGeolocation.addListener(
+   *   "geofenceError",
+   *   (event) => console.error(event.identifier, event.message)
+   * );
+   */
+  addListener(
+    eventName: 'geofenceError',
+    listenerFunc: (event: GeofenceErrorEvent) => void,
   ): Promise<PluginListenerHandle>;
 
   /**

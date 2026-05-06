@@ -6,6 +6,7 @@ import android.content.Intent;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import com.getcapacitor.Logger;
 import com.google.android.gms.location.Geofence;
+import com.google.android.gms.location.GeofenceStatusCodes;
 import com.google.android.gms.location.GeofencingEvent;
 import java.util.List;
 import org.json.JSONObject;
@@ -19,7 +20,19 @@ public class GeofenceBroadcastReceiver extends BroadcastReceiver {
             return;
         }
         if (event.hasError()) {
-            Logger.error("Geofence event failed with code: " + event.getErrorCode());
+            int errorCode = event.getErrorCode();
+            String message = GeofenceStatusCodes.getStatusCodeString(errorCode);
+            Logger.error("Geofence event failed with code: " + errorCode);
+            try {
+                JSONObject data = new JSONObject();
+                data.put("code", errorCode);
+                data.put("message", message);
+                Intent localIntent = new Intent(GeofenceStore.ACTION_GEOFENCE_ERROR);
+                localIntent.putExtra(GeofenceStore.EXTRA_GEOFENCE_ERROR, data.toString());
+                LocalBroadcastManager.getInstance(context).sendBroadcast(localIntent);
+            } catch (Exception exception) {
+                Logger.error("Failed to emit geofence error", exception);
+            }
             return;
         }
 

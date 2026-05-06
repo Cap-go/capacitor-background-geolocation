@@ -437,12 +437,13 @@ public class BackgroundGeolocation extends Plugin {
     private PendingIntent getGeofencePendingIntent() {
         Intent intent = new Intent(getContext(), GeofenceBroadcastReceiver.class);
         intent.setPackage(getContext().getPackageName());
-        return PendingIntent.getBroadcast(
-            getContext(),
-            GEOFENCE_PENDING_INTENT_REQUEST_CODE,
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
+        int flags = PendingIntent.FLAG_UPDATE_CURRENT;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            flags |= PendingIntent.FLAG_MUTABLE;
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            flags |= PendingIntent.FLAG_IMMUTABLE;
+        }
+        return PendingIntent.getBroadcast(getContext(), GEOFENCE_PENDING_INTENT_REQUEST_CODE, intent, flags);
     }
 
     private static double[][] getJavaDoubleArray(JSArray jsArray) throws JSONException {
@@ -527,14 +528,19 @@ public class BackgroundGeolocation extends Plugin {
 
         @Override
         public void onReceive(Context context, Intent intent) {
-            String payload = intent.getStringExtra(GeofenceStore.EXTRA_GEOFENCE_PAYLOAD);
+            boolean errorEvent = GeofenceStore.ACTION_GEOFENCE_ERROR.equals(intent.getAction());
+            String payload = intent.getStringExtra(errorEvent ? GeofenceStore.EXTRA_GEOFENCE_ERROR : GeofenceStore.EXTRA_GEOFENCE_PAYLOAD);
             if (payload == null || payload.isEmpty()) {
                 return;
             }
             try {
-                notifyListeners("geofenceTransition", GeofenceStore.toJSObject(new JSONObject(payload)), true);
+                notifyListeners(
+                    errorEvent ? "geofenceError" : "geofenceTransition",
+                    GeofenceStore.toJSObject(new JSONObject(payload)),
+                    true
+                );
             } catch (JSONException exception) {
-                Logger.error("Could not parse geofence transition payload", exception);
+                Logger.error("Could not parse geofence payload", exception);
             }
         }
     }
@@ -568,10 +574,9 @@ public class BackgroundGeolocation extends Plugin {
         );
 
         geofenceEventReceiver = new GeofenceEventReceiver();
-        LocalBroadcastManager.getInstance(this.getContext()).registerReceiver(
-            geofenceEventReceiver,
-            new IntentFilter(GeofenceStore.ACTION_GEOFENCE_EVENT)
-        );
+        IntentFilter geofenceFilter = new IntentFilter(GeofenceStore.ACTION_GEOFENCE_EVENT);
+        geofenceFilter.addAction(GeofenceStore.ACTION_GEOFENCE_ERROR);
+        LocalBroadcastManager.getInstance(this.getContext()).registerReceiver(geofenceEventReceiver, geofenceFilter);
     }
 
     private CompletableFuture<BackgroundGeolocationService.LocalBinder> getServiceConnection() {

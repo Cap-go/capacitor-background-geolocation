@@ -17,7 +17,9 @@ import org.json.JSONObject;
 final class GeofenceStore {
 
     static final String ACTION_GEOFENCE_EVENT = GeofenceStore.class.getPackage().getName() + ".geofence";
+    static final String ACTION_GEOFENCE_ERROR = GeofenceStore.class.getPackage().getName() + ".geofence.error";
     static final String EXTRA_GEOFENCE_PAYLOAD = "payload";
+    static final String EXTRA_GEOFENCE_ERROR = "error";
 
     private static final String PREFS_NAME = "CapgoBackgroundGeolocationGeofences";
     private static final String KEY_URL = "url";

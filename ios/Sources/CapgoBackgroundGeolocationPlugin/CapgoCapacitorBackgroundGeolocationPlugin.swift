@@ -341,8 +341,13 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
                 return call.reject("Identifier is required")
             }
             let manager = self.ensureGeofenceLocationManager()
-            guard let region = manager.monitoredRegions.first(where: { $0.identifier == identifier }) else {
+            guard self.persistedGeofenceRegionIds().contains(identifier) else {
                 return call.reject("Could not find a region with that identifier", "NOT_FOUND")
+            }
+            guard let region = manager.monitoredRegions.first(where: { $0.identifier == identifier && $0 is CLCircularRegion }) else {
+                self.removePersistedGeofenceRegion(identifier)
+                self.lastGeofenceTransition.removeValue(forKey: identifier)
+                return call.resolve()
             }
             manager.stopMonitoring(for: region)
             self.removePersistedGeofenceRegion(identifier)
@@ -354,11 +359,14 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     @objc func removeAllGeofences(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
             let manager = self.ensureGeofenceLocationManager()
-            for region in manager.monitoredRegions where region is CLCircularRegion {
+            let identifiers = self.persistedGeofenceRegionIds()
+            for region in manager.monitoredRegions where region is CLCircularRegion && identifiers.contains(region.identifier) {
                 manager.stopMonitoring(for: region)
-                self.removePersistedGeofenceRegion(region.identifier)
             }
-            self.lastGeofenceTransition.removeAll()
+            for identifier in identifiers {
+                self.removePersistedGeofenceRegion(identifier)
+                self.lastGeofenceTransition.removeValue(forKey: identifier)
+            }
             call.resolve()
         }
     }
@@ -366,9 +374,10 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     @objc func getMonitoredGeofences(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
             let manager = self.ensureGeofenceLocationManager()
+            let identifiers = self.persistedGeofenceRegionIds()
             let regions = manager.monitoredRegions.compactMap { region -> String? in
-                region is CLCircularRegion ? region.identifier : nil
-            }
+                region is CLCircularRegion && identifiers.contains(region.identifier) ? region.identifier : nil
+            }.sorted()
             call.resolve(["regions": regions])
         }
     }
@@ -441,6 +450,13 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
 
     private func removePersistedGeofenceRegion(_ identifier: String) {
         UserDefaults.standard.removeObject(forKey: geofenceRegionPrefix + identifier)
+    }
+
+    private func persistedGeofenceRegionIds() -> Set<String> {
+        Set(UserDefaults.standard.dictionaryRepresentation().keys.compactMap { key in
+            guard key.hasPrefix(geofenceRegionPrefix) else { return nil }
+            return String(key.dropFirst(geofenceRegionPrefix.count))
+        })
     }
 
     private func geofenceTransitionData(for region: CLRegion, enter: Bool) -> [String: Any] {
@@ -699,11 +715,14 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
 
     public func locationManager(_ manager: CLLocationManager, monitoringDidFailFor region: CLRegion?, withError error: Error) {
         guard manager === geofenceLocationManager, let region = region else { return }
+        let nsError = error as NSError
         notifyListeners(
-            "geofenceTransition",
+            "geofenceError",
             data: [
                 "identifier": region.identifier,
-                "error": error.localizedDescription
+                "message": error.localizedDescription,
+                "code": nsError.code,
+                "domain": nsError.domain
             ],
             retainUntilConsumed: true
         )
