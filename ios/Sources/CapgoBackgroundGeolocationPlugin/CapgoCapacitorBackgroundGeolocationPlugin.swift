@@ -68,6 +68,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     private var geofenceNotifyOnExit: Bool = true
     private var geofencePayload: [String: Any] = [:]
     private var pendingGeofenceSetupCall: CAPPluginCall?
+    private var pendingGeofenceSetupTimeout: DispatchWorkItem?
     private var pendingGeofenceAddCalls: [String: CAPPluginCall] = [:]
     private var pendingGeofenceRegions: [String: (region: CLCircularRegion, payload: [String: Any])] = [:]
     private var lastGeofenceTransition: [String: String] = [:]
@@ -249,6 +250,29 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         }
     }
 
+    private func requestGeofenceAlwaysAuthorization(_ call: CAPPluginCall, manager: CLLocationManager, status: CLAuthorizationStatus) {
+        pendingGeofenceSetupCall = call
+        pendingGeofenceSetupTimeout?.cancel()
+        let timeout = DispatchWorkItem { [weak self] in
+            guard let self = self, let pendingCall = self.pendingGeofenceSetupCall else { return }
+            self.pendingGeofenceSetupCall = nil
+            self.pendingGeofenceSetupTimeout = nil
+            if manager.authorizationStatus == .authorizedAlways {
+                pendingCall.resolve()
+            } else {
+                pendingCall.reject(
+                    "Always location permission is required for geofencing",
+                    "NOT_AUTHORIZED"
+                )
+            }
+        }
+        pendingGeofenceSetupTimeout = timeout
+        manager.requestAlwaysAuthorization()
+        if status == .authorizedWhenInUse {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 30, execute: timeout)
+        }
+    }
+
     @objc func setupGeofencing(_ call: CAPPluginCall) {
         DispatchQueue.main.async {
             if self.pendingGeofenceSetupCall != nil {
@@ -288,8 +312,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             if [.denied, .restricted].contains(status) {
                 return call.reject("Always location permission is required for geofencing", "NOT_AUTHORIZED")
             }
-            self.pendingGeofenceSetupCall = call
-            manager.requestAlwaysAuthorization()
+            self.requestGeofenceAlwaysAuthorization(call, manager: manager, status: status)
         }
     }
 
@@ -722,9 +745,13 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     ) {
         if let pendingCall = pendingGeofenceSetupCall {
             if status == .authorizedAlways {
+                pendingGeofenceSetupTimeout?.cancel()
+                pendingGeofenceSetupTimeout = nil
                 pendingGeofenceSetupCall = nil
                 pendingCall.resolve()
             } else if status == .denied || status == .restricted || status == .authorizedWhenInUse {
+                pendingGeofenceSetupTimeout?.cancel()
+                pendingGeofenceSetupTimeout = nil
                 pendingGeofenceSetupCall = nil
                 pendingCall.reject("Always location permission is required for geofencing", "NOT_AUTHORIZED")
             }

@@ -9,6 +9,7 @@ import androidx.work.OneTimeWorkRequest;
 import androidx.work.WorkManager;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Logger;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -146,7 +147,7 @@ final class GeofenceStore {
         WorkManager.getInstance(context).enqueue(request);
     }
 
-    static void sendTransition(Context context, JSONObject data) {
+    static void sendTransition(Context context, JSONObject data) throws IOException {
         String urlString = getUrl(context);
         if (urlString == null || urlString.isEmpty()) {
             return;
@@ -168,8 +169,9 @@ final class GeofenceStore {
             }
             int responseCode = connection.getResponseCode();
             Logger.debug("Geofence transition POST finished with response code: " + responseCode);
-        } catch (Exception exception) {
-            Logger.error("Geofence transition POST failed", exception);
+            if (responseCode < HttpURLConnection.HTTP_OK || responseCode >= HttpURLConnection.HTTP_MULT_CHOICE) {
+                throw new IOException("Geofence transition POST failed with response code: " + responseCode);
+            }
         } finally {
             if (connection != null) {
                 connection.disconnect();
