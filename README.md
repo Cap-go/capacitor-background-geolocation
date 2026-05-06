@@ -127,6 +127,16 @@ await BackgroundGeolocation.removeGeofence({ identifier: "office" });
 handle.remove();
 ```
 
+### Android background geofence permission
+
+The plugin does not add `ACCESS_BACKGROUND_LOCATION` by default. Add it to your app manifest only when you need background geofencing or background location updates:
+
+```xml
+<uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
+```
+
+Apps that only use foreground location can omit this permission.
+
 ```javascript
 // If you just want the current location, try something like this. The longer
 // the timeout, the more accurate the guess will be. I wouldn't go below about 100ms.

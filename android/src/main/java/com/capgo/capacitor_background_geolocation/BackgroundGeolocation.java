@@ -218,7 +218,12 @@ public class BackgroundGeolocation extends Plugin {
         String url = call.getString("url");
         if (url != null && !url.isEmpty()) {
             try {
-                new URL(url);
+                URL urlObject = new URL(url);
+                String protocol = urlObject.getProtocol();
+                if (!"http".equalsIgnoreCase(protocol) && !"https".equalsIgnoreCase(protocol)) {
+                    call.reject("Given url is not valid");
+                    return;
+                }
             } catch (Exception exception) {
                 call.reject("Given url is not valid");
                 return;

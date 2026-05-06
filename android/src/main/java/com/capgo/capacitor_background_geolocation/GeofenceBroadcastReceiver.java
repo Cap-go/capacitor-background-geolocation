@@ -47,22 +47,16 @@ public class GeofenceBroadcastReceiver extends BroadcastReceiver {
         }
 
         boolean enter = transition == Geofence.GEOFENCE_TRANSITION_ENTER;
-        PendingResult pendingResult = goAsync();
-        new Thread(() -> {
-            try {
-                for (Geofence geofence : triggeringGeofences) {
-                    JSONObject data = GeofenceStore.buildTransitionData(context, geofence.getRequestId(), enter);
-                    Intent localIntent = new Intent(GeofenceStore.ACTION_GEOFENCE_EVENT);
-                    localIntent.putExtra(GeofenceStore.EXTRA_GEOFENCE_PAYLOAD, data.toString());
-                    LocalBroadcastManager.getInstance(context).sendBroadcast(localIntent);
-                    GeofenceStore.sendTransition(context, data);
-                }
-            } catch (Exception exception) {
-                Logger.error("Failed to handle geofence transition", exception);
-            } finally {
-                pendingResult.finish();
+        try {
+            for (Geofence geofence : triggeringGeofences) {
+                JSONObject data = GeofenceStore.buildTransitionData(context, geofence.getRequestId(), enter);
+                Intent localIntent = new Intent(GeofenceStore.ACTION_GEOFENCE_EVENT);
+                localIntent.putExtra(GeofenceStore.EXTRA_GEOFENCE_PAYLOAD, data.toString());
+                LocalBroadcastManager.getInstance(context).sendBroadcast(localIntent);
+                GeofenceStore.enqueueTransition(context, data);
             }
-        })
-            .start();
+        } catch (Exception exception) {
+            Logger.error("Failed to handle geofence transition", exception);
+        }
     }
 }

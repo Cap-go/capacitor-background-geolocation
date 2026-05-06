@@ -257,7 +257,9 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             }
             var backendUrl: URL?
             if let urlString = call.getString("url"), !urlString.isEmpty {
-                guard let url = URL(string: urlString), url.scheme != nil else {
+                guard let url = URL(string: urlString),
+                      let scheme = url.scheme?.lowercased(),
+                      ["http", "https"].contains(scheme) else {
                     return call.reject("Given url is not valid")
                 }
                 backendUrl = url
@@ -516,7 +518,20 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         request.httpBody = body
-        URLSession.shared.dataTask(with: request).resume()
+
+        var backgroundTask = UIBackgroundTaskIdentifier.invalid
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "CapgoGeofenceTransition") {
+            if backgroundTask != .invalid {
+                UIApplication.shared.endBackgroundTask(backgroundTask)
+                backgroundTask = .invalid
+            }
+        }
+        URLSession.shared.dataTask(with: request) { _, _, _ in
+            if backgroundTask != .invalid {
+                UIApplication.shared.endBackgroundTask(backgroundTask)
+                backgroundTask = .invalid
+            }
+        }.resume()
     }
 
     private func startUpdatingLocation() {

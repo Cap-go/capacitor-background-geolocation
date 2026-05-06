@@ -2,6 +2,11 @@ package com.capgo.capacitor_background_geolocation;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import androidx.work.Constraints;
+import androidx.work.Data;
+import androidx.work.NetworkType;
+import androidx.work.OneTimeWorkRequest;
+import androidx.work.WorkManager;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Logger;
 import java.io.OutputStream;
@@ -126,6 +131,19 @@ final class GeofenceStore {
         }
         data.put("payload", payload);
         return data;
+    }
+
+    static void enqueueTransition(Context context, JSONObject data) {
+        if (getUrl(context) == null || getUrl(context).isEmpty()) {
+            return;
+        }
+        Data inputData = new Data.Builder().putString(EXTRA_GEOFENCE_PAYLOAD, data.toString()).build();
+        Constraints constraints = new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build();
+        OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(GeofenceTransitionWorker.class)
+            .setInputData(inputData)
+            .setConstraints(constraints)
+            .build();
+        WorkManager.getInstance(context).enqueue(request);
     }
 
     static void sendTransition(Context context, JSONObject data) {
