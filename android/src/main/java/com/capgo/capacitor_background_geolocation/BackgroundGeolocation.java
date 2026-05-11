@@ -401,7 +401,7 @@ public class BackgroundGeolocation extends Plugin {
             geofencePermissionFuture = null;
             return;
         }
-        requestBackgroundLocationPermissionIfNeeded(call, call.getBoolean("backgroundLocation", false));
+        requestBackgroundLocationPermissionIfNeeded(call, GeofenceStore.getBackgroundLocation(getContext()));
     }
 
     @PermissionCallback
