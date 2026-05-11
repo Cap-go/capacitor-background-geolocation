@@ -97,15 +97,13 @@ BackgroundGeolocation.setPlannedRoute({soundFile: "assets/myFile.mp3", route: [[
 
 ## Native geofencing
 
-Use native geofencing when you need lightweight location boundaries such as stores, job sites, delivery zones, campuses, or check-in areas. The plugin monitors geofences natively, emits JavaScript events while the app is active, and can send transition payloads directly to your backend while the WebView is suspended.
+Use native geofencing when you need lightweight location boundaries such as stores, job sites, delivery zones, campuses, or check-in areas. The plugin monitors geofences natively and emits JavaScript events while the app is active. Android background delivery is optional and only requested when you opt in.
 
 ```javascript
 import { BackgroundGeolocation } from "@capgo/background-geolocation";
 
-// Geofencing can notify JavaScript while the app is alive and can also POST
-// transitions natively while the WebView is suspended.
+// Geofencing can notify JavaScript while the app is alive.
 await BackgroundGeolocation.setupGeofencing({
-    url: "https://api.example.com/geofences",
     notifyOnEntry: true,
     notifyOnExit: true,
     payload: { userId: "123" }
@@ -129,13 +127,20 @@ handle.remove();
 
 ### Android background geofence permission
 
-The plugin does not add `ACCESS_BACKGROUND_LOCATION` by default. Add it to your app manifest only when you need background geofencing or background location updates:
+The plugin does not add `ACCESS_BACKGROUND_LOCATION` by default and does not request it unless you explicitly opt in. Apps that only use foreground location can omit this permission.
+
+Opt in only when you need Android geofence transitions while the app is in the background:
 
 ```xml
 <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 ```
 
-Apps that only use foreground location can omit this permission.
+```javascript
+await BackgroundGeolocation.setupGeofencing({
+    url: "https://api.example.com/geofences",
+    backgroundLocation: true
+});
+```
 
 ```javascript
 // If you just want the current location, try something like this. The longer
@@ -211,7 +216,7 @@ Set the the `android.useLegacyBridge` option to `true` in your Capacitor configu
 
 On Android 13+, the app needs the `POST_NOTIFICATIONS` runtime permission to show the persistent notification informing the user that their location is being used in the background. This runtime permission is requested after the location permission is granted.
 
-For geofencing on Android 10+, the app also needs `ACCESS_BACKGROUND_LOCATION`. Android may require the user to grant this from system settings after foreground location is granted; use `openSettings()` if the permission remains denied.
+For background geofencing on Android 10+, the app also needs `ACCESS_BACKGROUND_LOCATION` and `backgroundLocation: true` in `setupGeofencing()`. Android may require the user to grant this from system settings after foreground location is granted; use `openSettings()` if the permission remains denied. Leave `backgroundLocation` unset or `false` if your app does not have Google Play approval for Android background location.
 
 If your app forwards location updates to a server in real time, be aware that after 5 minutes in the background Android will throttle HTTP requests initiated from the WebView. The solution is to use a native HTTP plugin such as [CapacitorHttp](https://capacitorjs.com/docs/apis/http). See https://github.com/capacitor-community/background-geolocation/issues/14.
 
@@ -359,8 +364,9 @@ setupGeofencing(options: GeofenceSetupOptions) => Promise<void>
 
 Configures native geofence transition handling.
 
-Call this before adding geofences when you need native background POSTs
-or default entry/exit settings.
+Call this before adding geofences when you need default entry/exit settings
+or native background POSTs. Android background POSTs require
+`backgroundLocation: true`.
 
 | Param         | Type                                                                  | Description                        |
 | ------------- | --------------------------------------------------------------------- | ---------------------------------- |
@@ -546,17 +552,18 @@ Extends the standard Error with optional error codes.
 
 Options for configuring native geofence transition handling.
 
-When `url` is provided, native iOS and Android code sends a JSON `POST`
-whenever a monitored region is entered or exited. This keeps geofence
-handling useful when the WebView is suspended.
+When `url` is provided, native code can send a JSON `POST` whenever a
+monitored region is entered or exited. Android background POST delivery
+requires `backgroundLocation: true`.
 
-| Prop                     | Type                                                             | Description                                                                                                                                                                                                                                              | Default           | Since  |
-| ------------------------ | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | ------ |
-| **`url`**                | <code>string</code>                                              | Endpoint that receives geofence transition payloads.                                                                                                                                                                                                     |                   | 8.0.30 |
-| **`notifyOnEntry`**      | <code>boolean</code>                                             | Whether entry transitions should be monitored.                                                                                                                                                                                                           | <code>true</code> | 8.0.30 |
-| **`notifyOnExit`**       | <code>boolean</code>                                             | Whether exit transitions should be monitored.                                                                                                                                                                                                            | <code>true</code> | 8.0.30 |
-| **`payload`**            | <code><a href="#record">Record</a>&lt;string, unknown&gt;</code> | Base JSON payload merged into every native transition POST and listener event.                                                                                                                                                                           |                   | 8.0.30 |
-| **`requestPermissions`** | <code>boolean</code>                                             | Whether the plugin should request the native location permission needed for geofencing. iOS geofencing needs Always location authorization. Android background geofencing needs foreground location and, on Android 10+, background location permission. | <code>true</code> | 8.0.30 |
+| Prop                     | Type                                                             | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Default            | Since  |
+| ------------------------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------ | ------ |
+| **`url`**                | <code>string</code>                                              | Endpoint that receives geofence transition payloads. On Android, native background POST delivery requires `backgroundLocation: true`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |                    | 8.0.30 |
+| **`notifyOnEntry`**      | <code>boolean</code>                                             | Whether entry transitions should be monitored.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | <code>true</code>  | 8.0.30 |
+| **`notifyOnExit`**       | <code>boolean</code>                                             | Whether exit transitions should be monitored.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | <code>true</code>  | 8.0.30 |
+| **`payload`**            | <code><a href="#record">Record</a>&lt;string, unknown&gt;</code> | Base JSON payload merged into every native transition POST and listener event.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |                    | 8.0.30 |
+| **`requestPermissions`** | <code>boolean</code>                                             | Whether the plugin should request the native location permission needed for geofencing. iOS geofencing needs Always location authorization. Android geofencing requests foreground location by default. Android background location is only requested when `backgroundLocation` is enabled.                                                                                                                                                                                                                                                                                                                                    | <code>true</code>  | 8.0.30 |
+| **`backgroundLocation`** | <code>boolean</code>                                             | Whether Android geofencing should opt into background location permission. The plugin does not add `ACCESS_BACKGROUND_LOCATION` to your app manifest. Leave this disabled if your app does not have Google Play approval for Android background location. Enable it only after adding `ACCESS_BACKGROUND_LOCATION` to your app manifest and when you need Android geofence transitions while the app is in the background. This option only affects Android. Android versions below 10 do not request an extra background-location runtime permission, but the option still gates native Android background geofence delivery. | <code>false</code> | 8.0.34 |
 
 
 #### AddGeofenceOptions

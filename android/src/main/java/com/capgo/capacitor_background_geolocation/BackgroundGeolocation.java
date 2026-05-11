@@ -228,25 +228,34 @@ public class BackgroundGeolocation extends Plugin {
         }
 
         JSObject payload = call.getObject("payload", new JSObject());
-        GeofenceStore.saveSetup(getContext(), url, call.getBoolean("notifyOnEntry", true), call.getBoolean("notifyOnExit", true), payload);
+        boolean backgroundLocation = call.getBoolean("backgroundLocation", false);
+        GeofenceStore.saveSetup(
+            getContext(),
+            url,
+            call.getBoolean("notifyOnEntry", true),
+            call.getBoolean("notifyOnExit", true),
+            payload,
+            backgroundLocation
+        );
 
         if (!call.getBoolean("requestPermissions", true)) {
             call.resolve();
             return;
         }
 
-        requestGeofencePermissions(call)
+        requestGeofencePermissions(call, backgroundLocation)
             .thenRun(call::resolve)
             .exceptionally((throwable) -> {
-                call.reject("Background location permission is required for geofencing", "NOT_AUTHORIZED");
+                call.reject(geofencePermissionMessage(backgroundLocation), "NOT_AUTHORIZED");
                 return null;
             });
     }
 
     @PluginMethod
     public void addGeofence(PluginCall call) {
-        if (!hasGeofencePermissions()) {
-            call.reject("Background location permission is required for geofencing", "NOT_AUTHORIZED");
+        boolean backgroundLocation = GeofenceStore.getBackgroundLocation(getContext());
+        if (!hasGeofencePermissions(backgroundLocation)) {
+            call.reject(geofencePermissionMessage(backgroundLocation), "NOT_AUTHORIZED");
             return;
         }
         if (!isLocationEnabled(getContext())) {
@@ -322,7 +331,7 @@ public class BackgroundGeolocation extends Plugin {
                 })
                 .addOnFailureListener((exception) -> call.reject("Could not start monitoring the geofence", exception));
         } catch (SecurityException exception) {
-            call.reject("Background location permission is required for geofencing", "NOT_AUTHORIZED", exception);
+            call.reject(geofencePermissionMessage(backgroundLocation), "NOT_AUTHORIZED", exception);
         }
     }
 
@@ -365,8 +374,8 @@ public class BackgroundGeolocation extends Plugin {
         call.resolve(result);
     }
 
-    private CompletableFuture<Void> requestGeofencePermissions(PluginCall call) {
-        if (hasGeofencePermissions()) {
+    private CompletableFuture<Void> requestGeofencePermissions(PluginCall call, boolean backgroundLocation) {
+        if (hasGeofencePermissions(backgroundLocation)) {
             return CompletableFuture.completedFuture(null);
         }
         if (geofencePermissionFuture != null) {
@@ -378,7 +387,7 @@ public class BackgroundGeolocation extends Plugin {
             requestPermissionForAlias("location", call, "geofenceLocationPermissionsCallback");
             return future;
         }
-        requestBackgroundLocationPermissionIfNeeded(call);
+        requestBackgroundLocationPermissionIfNeeded(call, backgroundLocation);
         return future;
     }
 
@@ -392,7 +401,7 @@ public class BackgroundGeolocation extends Plugin {
             geofencePermissionFuture = null;
             return;
         }
-        requestBackgroundLocationPermissionIfNeeded(call);
+        requestBackgroundLocationPermissionIfNeeded(call, call.getBoolean("backgroundLocation", false));
     }
 
     @PermissionCallback
@@ -409,8 +418,8 @@ public class BackgroundGeolocation extends Plugin {
         geofencePermissionFuture = null;
     }
 
-    private void requestBackgroundLocationPermissionIfNeeded(PluginCall call) {
-        if (hasBackgroundLocationPermission()) {
+    private void requestBackgroundLocationPermissionIfNeeded(PluginCall call, boolean backgroundLocation) {
+        if (!backgroundLocation || hasBackgroundLocationPermission()) {
             geofencePermissionFuture.complete(null);
             geofencePermissionFuture = null;
             return;
@@ -418,8 +427,8 @@ public class BackgroundGeolocation extends Plugin {
         requestPermissionForAlias("backgroundLocation", call, "geofenceBackgroundPermissionsCallback");
     }
 
-    private boolean hasGeofencePermissions() {
-        return getPermissionState("location") == PermissionState.GRANTED && hasBackgroundLocationPermission();
+    private boolean hasGeofencePermissions(boolean backgroundLocation) {
+        return getPermissionState("location") == PermissionState.GRANTED && (!backgroundLocation || hasBackgroundLocationPermission());
     }
 
     private boolean hasBackgroundLocationPermission() {
@@ -430,6 +439,13 @@ public class BackgroundGeolocation extends Plugin {
             ContextCompat.checkSelfPermission(getContext(), Manifest.permission.ACCESS_BACKGROUND_LOCATION) ==
             PackageManager.PERMISSION_GRANTED
         );
+    }
+
+    private String geofencePermissionMessage(boolean backgroundLocation) {
+        if (backgroundLocation) {
+            return "Background location permission is required for geofencing";
+        }
+        return "Location permission is required for geofencing";
     }
 
     private GeofencingClient getGeofencingClient() {

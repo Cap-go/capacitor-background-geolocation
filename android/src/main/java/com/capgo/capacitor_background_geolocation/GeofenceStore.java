@@ -33,13 +33,21 @@ final class GeofenceStore {
     private static final String KEY_URL = "url";
     private static final String KEY_NOTIFY_ON_ENTRY = "notifyOnEntry";
     private static final String KEY_NOTIFY_ON_EXIT = "notifyOnExit";
+    private static final String KEY_BACKGROUND_LOCATION = "backgroundLocation";
     private static final String KEY_PAYLOAD = "payload";
     private static final String KEY_REGION_IDS = "regionIds";
     private static final String KEY_REGION_PREFIX = "region.";
 
     private GeofenceStore() {}
 
-    static void saveSetup(Context context, String url, boolean notifyOnEntry, boolean notifyOnExit, JSONObject payload) {
+    static void saveSetup(
+        Context context,
+        String url,
+        boolean notifyOnEntry,
+        boolean notifyOnExit,
+        JSONObject payload,
+        boolean backgroundLocation
+    ) {
         SharedPreferences.Editor editor = prefs(context).edit();
         if (url == null || url.isEmpty()) {
             editor.remove(KEY_URL);
@@ -48,6 +56,7 @@ final class GeofenceStore {
         }
         editor.putBoolean(KEY_NOTIFY_ON_ENTRY, notifyOnEntry);
         editor.putBoolean(KEY_NOTIFY_ON_EXIT, notifyOnExit);
+        editor.putBoolean(KEY_BACKGROUND_LOCATION, backgroundLocation);
         editor.putString(KEY_PAYLOAD, payload == null ? new JSONObject().toString() : payload.toString());
         editor.apply();
     }
@@ -62,6 +71,10 @@ final class GeofenceStore {
 
     static boolean getNotifyOnExit(Context context) {
         return prefs(context).getBoolean(KEY_NOTIFY_ON_EXIT, true);
+    }
+
+    static boolean getBackgroundLocation(Context context) {
+        return prefs(context).getBoolean(KEY_BACKGROUND_LOCATION, false);
     }
 
     static void saveRegion(
@@ -170,6 +183,9 @@ final class GeofenceStore {
     }
 
     static void enqueueTransition(Context context, JSONObject data) {
+        if (!getBackgroundLocation(context)) {
+            return;
+        }
         if (getUrl(context) == null || getUrl(context).isEmpty()) {
             return;
         }

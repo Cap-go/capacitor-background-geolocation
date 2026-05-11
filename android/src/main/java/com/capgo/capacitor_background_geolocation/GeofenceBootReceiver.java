@@ -34,6 +34,9 @@ public class GeofenceBootReceiver extends BroadcastReceiver {
 
     private static List<Task<Void>> restorePersistedGeofences(Context context) {
         List<Task<Void>> tasks = new ArrayList<>();
+        if (!GeofenceStore.getBackgroundLocation(context)) {
+            return tasks;
+        }
         var client = LocationServices.getGeofencingClient(context);
         for (String identifier : GeofenceStore.getRegionIds(context)) {
             JSONObject region = GeofenceStore.getRegion(context, identifier);
