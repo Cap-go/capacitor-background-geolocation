@@ -200,15 +200,17 @@ export interface SetPlannedRouteOptions {
 /**
  * Options for configuring native geofence transition handling.
  *
- * When `url` is provided, native iOS and Android code sends a JSON `POST`
- * whenever a monitored region is entered or exited. This keeps geofence
- * handling useful when the WebView is suspended.
+ * When `url` is provided, native code can send a JSON `POST` whenever a
+ * monitored region is entered or exited. Android background POST delivery
+ * requires `backgroundLocation: true`.
  *
  * @since 8.0.30
  */
 export interface GeofenceSetupOptions {
   /**
    * Endpoint that receives geofence transition payloads.
+   *
+   * On Android, native background POST delivery requires `backgroundLocation: true`.
    *
    * @since 8.0.30
    * @example "https://api.example.com/geofences"
@@ -244,14 +246,34 @@ export interface GeofenceSetupOptions {
   /**
    * Whether the plugin should request the native location permission needed for geofencing.
    *
-   * iOS geofencing needs Always location authorization. Android background geofencing
-   * needs foreground location and, on Android 10+, background location permission.
+   * iOS geofencing needs Always location authorization. Android geofencing requests
+   * foreground location by default. Android background location is only requested when
+   * `backgroundLocation` is enabled.
    *
    * @since 8.0.30
    * @default true
    * @example true
    */
   requestPermissions?: boolean;
+
+  /**
+   * Whether Android geofencing should opt into background location permission.
+   *
+   * The plugin does not add `ACCESS_BACKGROUND_LOCATION` to your app manifest.
+   * Leave this disabled if your app does not have Google Play approval for Android
+   * background location. Enable it only after adding `ACCESS_BACKGROUND_LOCATION`
+   * to your app manifest and when you need Android geofence transitions while the
+   * app is in the background.
+   *
+   * This option only affects Android. Android versions below 10 do not request
+   * an extra background-location runtime permission, but the option still gates
+   * native Android background geofence delivery.
+   *
+   * @since 8.0.34
+   * @default false
+   * @example false
+   */
+  backgroundLocation?: boolean;
 }
 
 /**
@@ -529,8 +551,9 @@ export interface BackgroundGeolocationPlugin {
   /**
    * Configures native geofence transition handling.
    *
-   * Call this before adding geofences when you need native background POSTs
-   * or default entry/exit settings.
+   * Call this before adding geofences when you need default entry/exit settings
+   * or native background POSTs. Android background POSTs require
+   * `backgroundLocation: true`.
    *
    * @param options The geofence configuration options
    * @returns A promise that resolves once geofencing is configured
@@ -538,7 +561,6 @@ export interface BackgroundGeolocationPlugin {
    * @since 8.0.30
    * @example
    * await BackgroundGeolocation.setupGeofencing({
-   *   url: "https://api.example.com/geofences",
    *   notifyOnEntry: true,
    *   notifyOnExit: true,
    *   payload: { userId: "123" }
