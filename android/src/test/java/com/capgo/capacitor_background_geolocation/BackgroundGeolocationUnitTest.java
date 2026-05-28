@@ -4,6 +4,8 @@ import static org.junit.Assert.*;
 
 import android.content.Intent;
 import android.location.Location;
+import android.location.LocationListener;
+import android.os.Bundle;
 import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofenceStatusCodes;
 import org.junit.Test;
@@ -46,6 +48,15 @@ public class BackgroundGeolocationUnitTest {
         } catch (ClassNotFoundException e) {
             fail("Plugin classes should exist: " + e.getMessage());
         }
+    }
+
+    @Test
+    public void testLocationListenerImplementsLegacyCallbacks() throws Exception {
+        LocationListener listener = BackgroundGeolocationService.createLocationListener(null);
+
+        assertDeclaresMethod(listener, "onStatusChanged", String.class, int.class, Bundle.class);
+        assertDeclaresMethod(listener, "onProviderEnabled", String.class);
+        assertDeclaresMethod(listener, "onProviderDisabled", String.class);
     }
 
     @Test
@@ -159,5 +170,10 @@ public class BackgroundGeolocationUnitTest {
 
     private boolean isValidLongitude(double longitude) {
         return longitude >= -180.0 && longitude <= 180.0;
+    }
+
+    private void assertDeclaresMethod(LocationListener listener, String methodName, Class<?>... parameterTypes)
+        throws NoSuchMethodException {
+        assertEquals(listener.getClass(), listener.getClass().getDeclaredMethod(methodName, parameterTypes).getDeclaringClass());
     }
 }

@@ -14,6 +14,7 @@ import android.location.LocationManager;
 import android.media.MediaPlayer;
 import android.os.Binder;
 import android.os.Build;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -165,6 +166,41 @@ public class BackgroundGeolocationService extends Service {
         }
     }
 
+    private void handleLocationChanged(android.location.Location location) {
+        startWatchdog();
+        if (mediaPlayer != null) {
+            double[] point = { location.getLongitude(), location.getLatitude() };
+            var offRoute = distancePointToRoute(point) > distanceThreshold;
+            if (offRoute == true && isOffRoute == false) {
+                mediaPlayer.start();
+            }
+            isOffRoute = offRoute;
+        }
+        Intent intent = new Intent(ACTION_BROADCAST);
+        intent.putExtra("location", location);
+        intent.putExtra("id", callbackId);
+        LocalBroadcastManager.getInstance(getApplicationContext()).sendBroadcast(intent);
+    }
+
+    // Android API < 30 requires these legacy callbacks to be implemented.
+    static LocationListener createLocationListener(final BackgroundGeolocationService service) {
+        return new LocationListener() {
+            @Override
+            public void onLocationChanged(android.location.Location location) {
+                service.handleLocationChanged(location);
+            }
+
+            @Override
+            public void onStatusChanged(String provider, int status, Bundle extras) {}
+
+            @Override
+            public void onProviderEnabled(String provider) {}
+
+            @Override
+            public void onProviderDisabled(String provider) {}
+        };
+    }
+
     // Handles requests from the activity.
     public class LocalBinder extends Binder {
 
@@ -175,21 +211,7 @@ public class BackgroundGeolocationService extends Service {
             callbackId = id;
             currentDistanceFilter = distanceFilter;
 
-            locationCallback = (location) -> {
-                startWatchdog();
-                if (mediaPlayer != null) {
-                    double[] point = { location.getLongitude(), location.getLatitude() };
-                    var offRoute = distancePointToRoute(point) > distanceThreshold;
-                    if (offRoute == true && isOffRoute == false) {
-                        mediaPlayer.start();
-                    }
-                    isOffRoute = offRoute;
-                }
-                Intent intent = new Intent(ACTION_BROADCAST);
-                intent.putExtra("location", location);
-                intent.putExtra("id", callbackId);
-                LocalBroadcastManager.getInstance(getApplicationContext()).sendBroadcast(intent);
-            };
+            locationCallback = createLocationListener(BackgroundGeolocationService.this);
 
             try {
                 client.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, distanceFilter, locationCallback);
