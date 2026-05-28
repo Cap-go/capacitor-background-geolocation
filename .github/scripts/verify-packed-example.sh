@@ -38,6 +38,25 @@ bun remove "$plugin_name"
 bun add "${packed_packages[0]}"
 bun run build
 
+prune_unrelated_capacitor_plugins() {
+  bun -e '
+    const fs = require("fs");
+    const packageJson = JSON.parse(fs.readFileSync("package.json", "utf8"));
+    const keep = new Set(["@capacitor/android", "@capacitor/cli", "@capacitor/core", "@capacitor/ios"]);
+
+    for (const section of ["dependencies", "devDependencies"]) {
+      for (const name of Object.keys(packageJson[section] || {})) {
+        if (name.startsWith("@capacitor/") && !keep.has(name)) {
+          delete packageJson[section][name];
+        }
+      }
+    }
+
+    fs.writeFileSync("package.json", JSON.stringify(packageJson, null, 2) + "\n");
+  '
+  bun install
+}
+
 sync_or_add_platform() {
   local platform="$1"
 
@@ -57,6 +76,7 @@ case "$platform" in
     ./gradlew build test
     ;;
   ios)
+    prune_unrelated_capacitor_plugins
     sync_or_add_platform ios
     xcodebuild -project ios/App/App.xcodeproj -scheme App -destination generic/platform=iOS CODE_SIGNING_ALLOWED=NO
     ;;
