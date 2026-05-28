@@ -13,11 +13,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@capacitor/core": "^8.0.0",
     "@capacitor/android": "^8.0.0",
+    "@capacitor/core": "^8.0.0",
     "@capacitor/ios": "^8.0.0",
-    "@capgo/background-geolocation": "file:..",
-    "@capacitor/local-notifications": "7.0.6"
+    "@capacitor/local-notifications": "^8.0.0",
+    "@capgo/background-geolocation": "file:.."
   },
   "devDependencies": {
     "@capacitor/cli": "^8.0.0",
