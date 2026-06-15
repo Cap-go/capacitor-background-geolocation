@@ -9,6 +9,7 @@
         "@capacitor/core": "^8.0.0",
         "@capacitor/ios": "^8.0.0",
         "@capacitor/local-notifications": "7.0.6",
+        "@capacitor/splash-screen": "^8.0.0",
         "@capgo/background-geolocation": "file:..",
         "@capgo/capacitor-updater": "^8.45.11",
       },
@@ -35,6 +36,8 @@
     "@capacitor/ios": ["@capacitor/ios@8.3.1", "", { "peerDependencies": { "@capacitor/core": "^8.3.0" } }, "sha512-BEhLyYYHWJLib4mpaPMaaylbC8meqgxbNYwQJH2svsSLW7yo/hFie+Zoo66a44XnqcMd2tvmAuzimWunXZi/xA=="],
 
     "@capacitor/local-notifications": ["@capacitor/local-notifications@7.0.6", "", { "peerDependencies": { "@capacitor/core": ">=7.0.0" } }, "sha512-RuZQ9P5aAlw6VU2i0i6g4i1XYZbbeDE9oaBg87gggHaUUscX7b1lltTlC1t11/JCPoyjECnZ/N8xfDNZ26hKhw=="],
+
+    "@capacitor/splash-screen": ["@capacitor/splash-screen@8.0.1", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, "sha512-c/ew/Z3eA7z8l06WoRAtzVF16VwYYrExmHmfGq1Cg675pVzaC/yuucB8/1xG1vhEfnW4fZ1KhSf/kzR1RiVYgg=="],
 
     "@capgo/background-geolocation": ["@capgo/background-geolocation@file:..", { "devDependencies": { "@capacitor/android": "^8.0.0", "@capacitor/cli": "^8.0.0", "@capacitor/core": "^8.0.0", "@capacitor/docgen": "^0.3.1", "@capacitor/ios": "^8.0.0", "@ionic/eslint-config": "^0.4.0", "@ionic/prettier-config": "^4.0.0", "@ionic/swiftlint-config": "^2.0.0", "@types/node": "^25.0.0", "eslint": "^8.57.1", "eslint-plugin-import": "^2.31.0", "husky": "^9.1.7", "prettier": "^3.6.2", "prettier-plugin-java": "^2.7.7", "prettier-pretty-check": "^0.2.0", "rimraf": "^6.1.0", "rollup": "^4.53.2", "swiftlint": "^2.0.0", "typescript": "^5.9.3" }, "peerDependencies": { "@capacitor/core": ">=8.0.0" } }],
 
