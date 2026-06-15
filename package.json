@@ -42,7 +42,10 @@
     "build": "bun run clean && bun run docgen && tsc && rollup -c rollup.config.mjs",
     "clean": "rimraf ./dist",
     "watch": "tsc --watch",
-    "prepublishOnly": "bun run build"
+    "prepublishOnly": "bun run build",
+    "example:install": "cd example-app && bun install --frozen-lockfile",
+    "example:build": "bun run build && cd example-app && bun install --frozen-lockfile && bun run build",
+    "example:capgo:deploy": "bun run example:build && bun scripts/deploy-example-capgo.mjs"
   },
   "keywords": [
     "capacitor",

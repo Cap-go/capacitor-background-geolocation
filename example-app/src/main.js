@@ -1,3 +1,5 @@
+import { CapacitorUpdater } from '@capgo/capacitor-updater';
+import { Capacitor } from '@capacitor/core';
 import './style.css';
 import { BackgroundGeolocation } from '@capgo/background-geolocation';
 import { LocalNotifications } from '@capacitor/local-notifications';
@@ -20,7 +22,8 @@ function log(text, time = Date.now(), color = 'gray') {
   container.insertBefore(li, container.firstChild);
 }
 
-document.querySelector('#app').innerHTML = '<h1>Background Geolocation</h1><div><ul id="watchers"></ul><button id="addFG">Add FG Watcher</button><button id="addBG">Add BG Watcher</button><button id="requestPerms">Request Permissions</button></div><ul id="log"><li>Init</li></ul>';
+document.querySelector('#app').innerHTML =
+  '<h1>Background Geolocation</h1><div><ul id="watchers"></ul><button id="addFG">Add FG Watcher</button><button id="addBG">Add BG Watcher</button><button id="requestPerms">Request Permissions</button></div><ul id="log"><li>Init</li></ul>';
 
 document.getElementById('addFG').onclick = () => log('FG watcher clicked');
 document.getElementById('addBG').onclick = () => log('BG watcher clicked');
@@ -34,3 +37,9 @@ document.getElementById('requestPerms').onclick = async () => {
 };
 
 log('Ready');
+
+if (Capacitor.isNativePlatform()) {
+  CapacitorUpdater.notifyAppReady().catch((error) => {
+    console.error('Capgo notifyAppReady failed', error);
+  });
+}
