@@ -44,8 +44,7 @@
     "watch": "tsc --watch",
     "prepublishOnly": "bun run build",
     "example:install": "cd example-app && bun install --frozen-lockfile",
-    "example:build": "bun run build && cd example-app && bun install --frozen-lockfile && bun run build",
-    "example:capgo:deploy": "bun run example:build && bun scripts/deploy-example-capgo.mjs"
+    "example:build": "bun run build && cd example-app && bun install --frozen-lockfile && bun run build"
   },
   "keywords": [
     "capacitor",
