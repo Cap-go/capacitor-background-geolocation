@@ -55,7 +55,7 @@ export interface RequestBackgroundGeolocationPermissionsOptions {
    * @since 8.0.43
    * @example ['backgroundLocation']
    */
-  permissions?: Array<'location' | 'backgroundLocation' | 'notification'>;
+  permissions?: ('location' | 'backgroundLocation' | 'notification')[];
 }
 
 /**

@@ -6,9 +6,9 @@ import android.content.Intent;
 import android.location.Location;
 import android.location.LocationListener;
 import android.os.Bundle;
+import com.getcapacitor.PermissionState;
 import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofenceStatusCodes;
-import com.getcapacitor.PermissionState;
 import org.junit.Test;
 
 /**
@@ -62,10 +62,7 @@ public class BackgroundGeolocationUnitTest {
 
     @Test
     public void testPermissionStateValueMapping() throws Exception {
-        java.lang.reflect.Method method = BackgroundGeolocation.class.getDeclaredMethod(
-            "permissionStateValue",
-            PermissionState.class
-        );
+        java.lang.reflect.Method method = BackgroundGeolocation.class.getDeclaredMethod("permissionStateValue", PermissionState.class);
         method.setAccessible(true);
         BackgroundGeolocation plugin = new BackgroundGeolocation();
 
