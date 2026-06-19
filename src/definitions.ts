@@ -1,4 +1,62 @@
-import type { PluginListenerHandle } from '@capacitor/core';
+import type { PermissionState, PluginListenerHandle } from '@capacitor/core';
+
+/**
+ * Background location authorization on iOS distinguishes Always from While Using.
+ * On Android this field uses standard {@link PermissionState} values.
+ *
+ * @since 8.0.43
+ */
+export type BackgroundLocationPermissionState = PermissionState | 'when_in_use' | 'always';
+
+/**
+ * Permission map returned by {@link BackgroundGeolocationPlugin.checkPermissions}
+ * and {@link BackgroundGeolocationPlugin.requestPermissions}.
+ *
+ * Use `checkPermissions()` to read authorization without prompting. Use
+ * `requestPermissions()` when you intentionally want to show the system dialog.
+ * Pair `@capacitor/geolocation` for foreground location and this plugin for
+ * background / Always authorization.
+ *
+ * @since 8.0.43
+ */
+export interface BackgroundGeolocationPermissionStatus {
+  /**
+   * Foreground location permission.
+   *
+   * @since 8.0.43
+   */
+  location?: PermissionState;
+  /**
+   * Background / Always location authorization.
+   *
+   * On iOS, `when_in_use` means While Using App only and `granted` / `always`
+   * means Always authorization was granted.
+   *
+   * @since 8.0.43
+   */
+  backgroundLocation?: BackgroundLocationPermissionState;
+  /**
+   * Android foreground-service notification permission (API 33+).
+   *
+   * @since 8.0.43
+   */
+  notification?: PermissionState;
+}
+
+/**
+ * Options for {@link BackgroundGeolocationPlugin.requestPermissions}.
+ *
+ * @since 8.0.43
+ */
+export interface RequestBackgroundGeolocationPermissionsOptions {
+  /**
+   * Subset of permissions to request. Defaults to all supported permissions.
+   *
+   * @since 8.0.43
+   * @example ['backgroundLocation']
+   */
+  permissions?: Array<'location' | 'backgroundLocation' | 'notification'>;
+}
 
 /**
  * The options for configuring for location updates.
@@ -651,6 +709,43 @@ export interface BackgroundGeolocationPlugin {
     eventName: 'geofenceError',
     listenerFunc: (event: GeofenceErrorEvent) => void,
   ): Promise<PluginListenerHandle>;
+
+  /**
+   * Read current location authorization without prompting or side effects.
+   *
+   * On iOS this maps `CLAuthorizationStatus` so you can distinguish Always from
+   * While Using App. On Android this reports foreground location,
+   * `ACCESS_BACKGROUND_LOCATION`, and notification permission where relevant.
+   *
+   * @returns Current permission status for this plugin
+   *
+   * @since 8.0.43
+   * @example
+   * const status = await BackgroundGeolocation.checkPermissions();
+   * if (status.backgroundLocation === 'when_in_use') {
+   *   // Show UI explaining why Always access is needed
+   * }
+   */
+  checkPermissions(): Promise<BackgroundGeolocationPermissionStatus>;
+
+  /**
+   * Request location-related permissions from the user.
+   *
+   * Prefer {@link BackgroundGeolocationPlugin.checkPermissions} for read-only
+   * status in settings screens. Call this only when the user has opted in.
+   *
+   * @param options Optional subset of permissions to request
+   * @returns Permission status after the request flow completes
+   *
+   * @since 8.0.43
+   * @example
+   * const status = await BackgroundGeolocation.requestPermissions({
+   *   permissions: ['backgroundLocation'],
+   * });
+   */
+  requestPermissions(
+    options?: RequestBackgroundGeolocationPermissionsOptions,
+  ): Promise<BackgroundGeolocationPermissionStatus>;
 
   /**
    * Get the native Capacitor plugin version

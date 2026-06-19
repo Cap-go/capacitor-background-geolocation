@@ -11,6 +11,8 @@ import type {
   RemoveGeofenceOptions,
   MonitoredGeofencesResult,
   GeofenceTransitionEvent,
+  BackgroundGeolocationPermissionStatus,
+  RequestBackgroundGeolocationPermissionsOptions,
 } from './definitions';
 
 interface WebGeofence {
@@ -166,6 +168,39 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
 
   async getMonitoredGeofences(): Promise<MonitoredGeofencesResult> {
     return { regions: Array.from(this.geofences.keys()) };
+  }
+
+  async checkPermissions(): Promise<BackgroundGeolocationPermissionStatus> {
+    if (!navigator.permissions) {
+      return {
+        location: 'prompt',
+        backgroundLocation: 'prompt',
+        notification: 'granted',
+      };
+    }
+
+    try {
+      const status = await navigator.permissions.query({ name: 'geolocation' as PermissionName });
+      const location =
+        status.state === 'granted' ? 'granted' : status.state === 'denied' ? 'denied' : 'prompt';
+      return {
+        location,
+        backgroundLocation: location,
+        notification: 'granted',
+      };
+    } catch {
+      return {
+        location: 'prompt',
+        backgroundLocation: 'prompt',
+        notification: 'granted',
+      };
+    }
+  }
+
+  async requestPermissions(
+    _options?: RequestBackgroundGeolocationPermissionsOptions,
+  ): Promise<BackgroundGeolocationPermissionStatus> {
+    return this.checkPermissions();
   }
 
   private validateGeofence(latitude: number, longitude: number, radius: number, identifier: string): void {
