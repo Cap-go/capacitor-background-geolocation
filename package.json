@@ -1,6 +1,6 @@
 {
   "name": "@capgo/background-geolocation",
-  "version": "8.0.42",
+  "version": "8.1.0",
   "description": "Accurate background geolocation and native geofencing for Capacitor apps on iOS and Android.",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",
