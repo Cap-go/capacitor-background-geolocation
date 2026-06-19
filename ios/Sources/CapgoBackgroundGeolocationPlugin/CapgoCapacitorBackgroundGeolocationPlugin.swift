@@ -51,6 +51,8 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         CAPPluginMethod(name: "removeGeofence", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "removeAllGeofences", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getMonitoredGeofences", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "checkPermissions", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "requestPermissions", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPluginVersion", returnType: CAPPluginReturnPromise)
     ]
     private var locationManager: CLLocationManager?
@@ -69,6 +71,8 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     private var geofencePayload: [String: Any] = [:]
     private var pendingGeofenceSetupCall: CAPPluginCall?
     private var pendingGeofenceSetupTimeout: DispatchWorkItem?
+    private var pendingPermissionRequestCall: CAPPluginCall?
+    private var pendingPermissionRequestTimeout: DispatchWorkItem?
     private var pendingGeofenceAddCalls: [String: CAPPluginCall] = [:]
     private var pendingGeofenceRegions: [String: (region: CLCircularRegion, payload: [String: Any])] = [:]
     private var lastGeofenceTransition: [String: String] = [:]
@@ -753,6 +757,10 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         _ manager: CLLocationManager,
         didChangeAuthorization status: CLAuthorizationStatus
     ) {
+        if pendingPermissionRequestCall != nil && status != .notDetermined {
+            resolvePendingPermissionRequest()
+        }
+
         if let pendingCall = pendingGeofenceSetupCall {
             if status == .authorizedAlways {
                 pendingGeofenceSetupTimeout?.cancel()
@@ -821,6 +829,112 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         if state == .inside {
             handleGeofenceTransition(for: region, enter: true)
         }
+    }
+
+    @objc override public func checkPermissions(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            call.resolve(self.permissionStatusDictionary())
+        }
+    }
+
+    @objc override public func requestPermissions(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            if self.pendingPermissionRequestCall != nil {
+                return call.reject("A permission request is already in progress", "PERMISSION_REQUEST_IN_PROGRESS")
+            }
+
+            let permissions = call.getArray("permissions", String.self) ?? [
+                "location",
+                "backgroundLocation",
+                "notification"
+            ]
+            let requestBackground = permissions.contains("backgroundLocation")
+            let requestLocation = permissions.contains("location") || requestBackground
+
+            guard requestLocation || requestBackground else {
+                return call.resolve(self.permissionStatusDictionary())
+            }
+
+            let manager = self.ensureGeofenceLocationManager()
+            let status = manager.authorizationStatus
+
+            if requestBackground {
+                if status == .authorizedAlways {
+                    return call.resolve(self.permissionStatusDictionary())
+                }
+                if [.denied, .restricted].contains(status) {
+                    return call.resolve(self.permissionStatusDictionary())
+                }
+                self.beginPermissionRequest(call, manager: manager, requestAlways: true, status: status)
+                return
+            }
+
+            if [.authorizedWhenInUse, .authorizedAlways].contains(status) {
+                return call.resolve(self.permissionStatusDictionary())
+            }
+            if [.denied, .restricted].contains(status) {
+                return call.resolve(self.permissionStatusDictionary())
+            }
+            self.beginPermissionRequest(call, manager: manager, requestAlways: false, status: status)
+        }
+    }
+
+    private func beginPermissionRequest(
+        _ call: CAPPluginCall,
+        manager: CLLocationManager,
+        requestAlways: Bool,
+        status: CLAuthorizationStatus
+    ) {
+        pendingPermissionRequestCall = call
+        pendingPermissionRequestTimeout?.cancel()
+        let timeout = DispatchWorkItem { [weak self] in
+            guard let self = self, let pendingCall = self.pendingPermissionRequestCall else { return }
+            self.pendingPermissionRequestCall = nil
+            self.pendingPermissionRequestTimeout = nil
+            pendingCall.resolve(self.permissionStatusDictionary())
+        }
+        pendingPermissionRequestTimeout = timeout
+        if requestAlways {
+            manager.requestAlwaysAuthorization()
+            if status == .authorizedWhenInUse {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 30, execute: timeout)
+            }
+        } else {
+            manager.requestWhenInUseAuthorization()
+        }
+    }
+
+    private func resolvePendingPermissionRequest() {
+        pendingPermissionRequestTimeout?.cancel()
+        pendingPermissionRequestTimeout = nil
+        guard let pendingCall = pendingPermissionRequestCall else { return }
+        pendingPermissionRequestCall = nil
+        pendingCall.resolve(permissionStatusDictionary())
+    }
+
+    private func permissionStatusDictionary() -> [String: Any] {
+        let status = ensureGeofenceLocationManager().authorizationStatus
+        var result: [String: Any] = [:]
+
+        switch status {
+        case .notDetermined:
+            result["location"] = "prompt"
+            result["backgroundLocation"] = "prompt"
+        case .restricted, .denied:
+            result["location"] = "denied"
+            result["backgroundLocation"] = "denied"
+        case .authorizedWhenInUse:
+            result["location"] = "granted"
+            result["backgroundLocation"] = "when_in_use"
+        case .authorizedAlways:
+            result["location"] = "granted"
+            result["backgroundLocation"] = "granted"
+        @unknown default:
+            result["location"] = "prompt"
+            result["backgroundLocation"] = "prompt"
+        }
+
+        return result
     }
 
     @objc func getPluginVersion(_ call: CAPPluginCall) {

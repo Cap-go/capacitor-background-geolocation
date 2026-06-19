@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.location.Location;
 import android.location.LocationListener;
 import android.os.Bundle;
+import com.getcapacitor.PermissionState;
 import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofenceStatusCodes;
 import org.junit.Test;
@@ -57,6 +58,18 @@ public class BackgroundGeolocationUnitTest {
         assertDeclaresMethod(listener, "onStatusChanged", String.class, int.class, Bundle.class);
         assertDeclaresMethod(listener, "onProviderEnabled", String.class);
         assertDeclaresMethod(listener, "onProviderDisabled", String.class);
+    }
+
+    @Test
+    public void testPermissionStateValueMapping() throws Exception {
+        java.lang.reflect.Method method = BackgroundGeolocation.class.getDeclaredMethod("permissionStateValue", PermissionState.class);
+        method.setAccessible(true);
+        BackgroundGeolocation plugin = new BackgroundGeolocation();
+
+        assertEquals("granted", method.invoke(plugin, PermissionState.GRANTED));
+        assertEquals("denied", method.invoke(plugin, PermissionState.DENIED));
+        assertEquals("prompt", method.invoke(plugin, PermissionState.PROMPT));
+        assertEquals("prompt", method.invoke(plugin, PermissionState.PROMPT_WITH_RATIONALE));
     }
 
     @Test

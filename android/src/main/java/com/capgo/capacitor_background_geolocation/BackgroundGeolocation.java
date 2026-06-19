@@ -34,6 +34,7 @@ import com.google.android.gms.location.GeofencingRequest;
 import com.google.android.gms.location.LocationServices;
 import java.net.URL;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import org.json.JSONArray;
@@ -150,6 +151,124 @@ public class BackgroundGeolocation extends Plugin {
     @PermissionCallback
     private void notificationPermissionsCallback(PluginCall call) {
         Logger.debug("notification permission callback");
+    }
+
+    @PluginMethod
+    @Override
+    public void checkPermissions(PluginCall call) {
+        call.resolve(buildPermissionStatus());
+    }
+
+    @PluginMethod
+    @Override
+    public void requestPermissions(PluginCall call) {
+        Set<String> permissions = parseRequestedPermissions(call);
+        if (!permissions.contains("location") && !permissions.contains("backgroundLocation") && !permissions.contains("notification")) {
+            call.resolve(buildPermissionStatus());
+            return;
+        }
+        continuePermissionRequest(call, permissions);
+    }
+
+    @PermissionCallback
+    private void generalLocationPermissionsCallback(PluginCall call) {
+        Set<String> permissions = parseRequestedPermissions(call);
+        continuePermissionRequest(call, permissions);
+    }
+
+    @PermissionCallback
+    private void generalBackgroundPermissionsCallback(PluginCall call) {
+        Set<String> permissions = parseRequestedPermissions(call);
+        continuePermissionRequest(call, permissions);
+    }
+
+    @PermissionCallback
+    private void generalNotificationPermissionsCallback(PluginCall call) {
+        call.resolve(buildPermissionStatus());
+    }
+
+    private void continuePermissionRequest(PluginCall call, Set<String> permissions) {
+        if (permissions.contains("location") && getPermissionState("location") != PermissionState.GRANTED) {
+            requestPermissionForAlias("location", call, "generalLocationPermissionsCallback");
+            return;
+        }
+        if (
+            permissions.contains("backgroundLocation") &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&
+            getPermissionState("location") == PermissionState.GRANTED &&
+            getPermissionState("backgroundLocation") != PermissionState.GRANTED
+        ) {
+            requestPermissionForAlias("backgroundLocation", call, "generalBackgroundPermissionsCallback");
+            return;
+        }
+        if (
+            permissions.contains("notification") &&
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            getPermissionState("notification") != PermissionState.GRANTED
+        ) {
+            requestPermissionForAlias("notification", call, "generalNotificationPermissionsCallback");
+            return;
+        }
+        call.resolve(buildPermissionStatus());
+    }
+
+    private Set<String> parseRequestedPermissions(PluginCall call) {
+        JSArray permissionsArray = call.getArray("permissions");
+        Set<String> permissions = new HashSet<>();
+        if (permissionsArray == null) {
+            permissions.add("location");
+            permissions.add("backgroundLocation");
+            permissions.add("notification");
+            return permissions;
+        }
+        try {
+            for (int i = 0; i < permissionsArray.length(); i++) {
+                String permission = permissionsArray.getString(i);
+                if (permission != null && !permission.isEmpty()) {
+                    permissions.add(permission);
+                }
+            }
+        } catch (JSONException exception) {
+            Logger.error("Could not parse permissions array", exception);
+        }
+        if (permissions.isEmpty()) {
+            permissions.add("location");
+            permissions.add("backgroundLocation");
+            permissions.add("notification");
+        }
+        return permissions;
+    }
+
+    private JSObject buildPermissionStatus() {
+        JSObject ret = new JSObject();
+        ret.put("location", permissionStateValue(getPermissionState("location")));
+        ret.put("backgroundLocation", getBackgroundLocationPermissionState());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            ret.put("notification", permissionStateValue(getPermissionState("notification")));
+        } else {
+            ret.put("notification", "granted");
+        }
+        return ret;
+    }
+
+    private String getBackgroundLocationPermissionState() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            return permissionStateValue(getPermissionState("location"));
+        }
+        return permissionStateValue(getPermissionState("backgroundLocation"));
+    }
+
+    private String permissionStateValue(PermissionState state) {
+        switch (state) {
+            case GRANTED:
+                return "granted";
+            case DENIED:
+                return "denied";
+            case PROMPT:
+            case PROMPT_WITH_RATIONALE:
+            default:
+                return "prompt";
+        }
     }
 
     @PluginMethod

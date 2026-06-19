@@ -293,6 +293,8 @@ Configuration specific to Android can be made in `strings.xml`:
 * [`getMonitoredGeofences()`](#getmonitoredgeofences)
 * [`addListener('geofenceTransition', ...)`](#addlistenergeofencetransition-)
 * [`addListener('geofenceError', ...)`](#addlistenergeofenceerror-)
+* [`checkPermissions()`](#checkpermissions)
+* [`requestPermissions(...)`](#requestpermissions)
 * [`getPluginVersion()`](#getpluginversion)
 * [Interfaces](#interfaces)
 * [Type Aliases](#type-aliases)
@@ -496,6 +498,47 @@ Listens for native geofence monitoring errors while the WebView is alive.
 --------------------
 
 
+### checkPermissions()
+
+```typescript
+checkPermissions() => Promise<BackgroundGeolocationPermissionStatus>
+```
+
+Read current location authorization without prompting or side effects.
+
+On iOS this maps `CLAuthorizationStatus` so you can distinguish Always from
+While Using App. On Android this reports foreground location,
+`ACCESS_BACKGROUND_LOCATION`, and notification permission where relevant.
+
+**Returns:** <code>Promise&lt;<a href="#backgroundgeolocationpermissionstatus">BackgroundGeolocationPermissionStatus</a>&gt;</code>
+
+**Since:** 8.0.43
+
+--------------------
+
+
+### requestPermissions(...)
+
+```typescript
+requestPermissions(options?: RequestBackgroundGeolocationPermissionsOptions | undefined) => Promise<BackgroundGeolocationPermissionStatus>
+```
+
+Request location-related permissions from the user.
+
+Prefer {@link BackgroundGeolocationPlugin.checkPermissions} for read-only
+status in settings screens. Call this only when the user has opted in.
+
+| Param         | Type                                                                                                                      | Description                               |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| **`options`** | <code><a href="#requestbackgroundgeolocationpermissionsoptions">RequestBackgroundGeolocationPermissionsOptions</a></code> | Optional subset of permissions to request |
+
+**Returns:** <code>Promise&lt;<a href="#backgroundgeolocationpermissionstatus">BackgroundGeolocationPermissionStatus</a>&gt;</code>
+
+**Since:** 8.0.43
+
+--------------------
+
+
 ### getPluginVersion()
 
 ```typescript
@@ -649,6 +692,32 @@ Event emitted when native geofence monitoring fails.
 | **`domain`**     | <code>string</code> | Native error domain, when available.                                 | 8.0.30 |
 
 
+#### BackgroundGeolocationPermissionStatus
+
+Permission map returned by {@link BackgroundGeolocationPlugin.checkPermissions}
+and {@link BackgroundGeolocationPlugin.requestPermissions}.
+
+Use `checkPermissions()` to read authorization without prompting. Use
+`requestPermissions()` when you intentionally want to show the system dialog.
+Pair `@capacitor/geolocation` for foreground location and this plugin for
+background / Always authorization.
+
+| Prop                     | Type                                                                                            | Description                                                                                                                                                   | Since  |
+| ------------------------ | ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| **`location`**           | <code><a href="#permissionstate">PermissionState</a></code>                                     | Foreground location permission.                                                                                                                               | 8.0.43 |
+| **`backgroundLocation`** | <code><a href="#backgroundlocationpermissionstate">BackgroundLocationPermissionState</a></code> | Background / Always location authorization. On iOS, `when_in_use` means While Using App only and `granted` / `always` means Always authorization was granted. | 8.0.43 |
+| **`notification`**       | <code><a href="#permissionstate">PermissionState</a></code>                                     | Android foreground-service notification permission (API 33+).                                                                                                 | 8.0.43 |
+
+
+#### RequestBackgroundGeolocationPermissionsOptions
+
+Options for {@link BackgroundGeolocationPlugin.requestPermissions}.
+
+| Prop              | Type                                                                  | Description                                                              | Since  |
+| ----------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------ | ------ |
+| **`permissions`** | <code>('location' \| 'backgroundLocation' \| 'notification')[]</code> | Subset of permissions to request. Defaults to all supported permissions. | 8.0.43 |
+
+
 ### Type Aliases
 
 
@@ -657,5 +726,18 @@ Event emitted when native geofence monitoring fails.
 Construct a type with a set of properties K of type T
 
 <code>{ [P in K]: T; }</code>
+
+
+#### PermissionState
+
+<code>'prompt' | 'prompt-with-rationale' | 'granted' | 'denied'</code>
+
+
+#### BackgroundLocationPermissionState
+
+Background location authorization on iOS distinguishes Always from While Using.
+On Android this field uses standard {@link <a href="#permissionstate">PermissionState</a>} values.
+
+<code><a href="#permissionstate">PermissionState</a> | 'when_in_use' | 'always'</code>
 
 </docgen-api>

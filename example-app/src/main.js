@@ -2,7 +2,6 @@ import { CapacitorUpdater } from '@capgo/capacitor-updater';
 import { Capacitor } from '@capacitor/core';
 import './style.css';
 import { BackgroundGeolocation } from '@capgo/background-geolocation';
-import { LocalNotifications } from '@capacitor/local-notifications';
 
 const plugin = BackgroundGeolocation;
 const state = { watchers: {}, startTime: Date.now() };
@@ -29,8 +28,10 @@ document.getElementById('addFG').onclick = () => log('FG watcher clicked');
 document.getElementById('addBG').onclick = () => log('BG watcher clicked');
 document.getElementById('requestPerms').onclick = async () => {
   try {
-    const result = await LocalNotifications.requestPermissions();
-    log('Permissions: ' + result.display);
+    const status = await plugin.checkPermissions();
+    log('Check permissions: ' + JSON.stringify(status));
+    const requested = await plugin.requestPermissions({ permissions: ['location', 'backgroundLocation', 'notification'] });
+    log('Request permissions: ' + JSON.stringify(requested));
   } catch (e) {
     log('Error: ' + e.message);
   }
