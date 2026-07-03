@@ -4,7 +4,7 @@ import pkg from './package.json';
 
 const config: CapacitorConfig = {
   appId: 'com.capgo.backgroundgeolocation.example',
-  appName: 'Background Geolocation Example',
+  appName: '@capgo/background-geolocation',
   webDir: 'dist',
   plugins: {
     SplashScreen: {
