@@ -116,7 +116,8 @@ public class BackgroundGeolocation extends Plugin {
                 call.getCallbackId(),
                 call.getString("backgroundTitle", "Using your location"),
                 call.getString("backgroundMessage", ""),
-                call.getFloat("distanceFilter", 0f)
+                call.getFloat("distanceFilter", 0f),
+                call.getString("url", null)
             );
         });
     }
@@ -743,7 +744,9 @@ public class BackgroundGeolocation extends Plugin {
 
     @Override
     protected void handleOnDestroy() {
-        if (serviceConnectionFuture != null) {
+        // In native delivery mode the foreground service must keep tracking after
+        // the app UI (and this plugin instance) is destroyed, so it is not stopped.
+        if (serviceConnectionFuture != null && !LocationStore.isEnabled(getContext())) {
             serviceConnectionFuture.thenAccept(BackgroundGeolocationService.LocalBinder::stop);
         }
 

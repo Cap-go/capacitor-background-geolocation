@@ -21,6 +21,9 @@ import android.os.Looper;
 import android.os.PowerManager;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import com.getcapacitor.Logger;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import org.json.JSONObject;
 
 // A bound and started service that is promoted to a foreground service
 // (showing a persistent notification) when the first background watcher is
@@ -50,6 +53,12 @@ public class BackgroundGeolocationService extends Service {
     private float currentDistanceFilter;
     private PowerManager.WakeLock wakeLock;
 
+    // When set (via the "url" start option), each location is also POSTed to
+    // this URL directly from native code so delivery survives the WebView being
+    // destroyed. Delivery runs on postExecutor to keep it off the main thread.
+    private String nativePostUrl;
+    private ExecutorService postExecutor;
+
     @Override
     public IBinder onBind(Intent intent) {
         return binder;
@@ -59,8 +68,15 @@ public class BackgroundGeolocationService extends Service {
     // activity, leading to nasty crashes as reported in issue #59. If we learn
     // that the application has been killed, all watchers are stopped and the
     // service is terminated immediately.
+    //
+    // The exception is native delivery mode (a "url" was given to start()): there
+    // the service is meant to outlive the app UI, so it keeps running and relies
+    // on onStartCommand to re-establish updates if the process is later restarted.
     @Override
     public boolean onUnbind(Intent intent) {
+        if (LocationStore.isEnabled(getApplicationContext())) {
+            return false;
+        }
         if (client != null && locationCallback != null) {
             client.removeUpdates(locationCallback);
         }
@@ -69,6 +85,41 @@ public class BackgroundGeolocationService extends Service {
         stopWatchdog();
         stopSelf();
         return false;
+    }
+
+    // In native delivery mode, keep tracking after the user swipes the app away
+    // from the recents list; otherwise fall back to the default teardown.
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        if (LocationStore.isEnabled(getApplicationContext())) {
+            return;
+        }
+        super.onTaskRemoved(rootIntent);
+    }
+
+    // The system may kill and later restart a START_STICKY foreground service
+    // with a null intent and no binder call. When native delivery is configured,
+    // re-establish location updates from the persisted config so tracking resumes
+    // without the app UI.
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        Context context = getApplicationContext();
+        if (!LocationStore.isEnabled(context)) {
+            // Not in native delivery mode: preserve the original behavior where the
+            // service does not outlive the app, so it is not sticky-restarted.
+            return START_NOT_STICKY;
+        }
+        nativePostUrl = LocationStore.getUrl(context);
+        promoteToForeground(LocationStore.getTitle(context), LocationStore.getMessage(context));
+        if (client == null || locationCallback == null) {
+            acquireWakeLock();
+            client = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+            currentDistanceFilter = LocationStore.getDistanceFilter(context);
+            locationCallback = createLocationListener(this);
+            requestLocationUpdates();
+            startWatchdog();
+        }
+        return START_STICKY;
     }
 
     @Override
@@ -80,6 +131,10 @@ public class BackgroundGeolocationService extends Service {
         releaseMediaPlayer();
         releaseWakeLock();
         stopWatchdog();
+        if (postExecutor != null) {
+            postExecutor.shutdown();
+            postExecutor = null;
+        }
     }
 
     private void releaseMediaPlayer() {
@@ -168,6 +223,9 @@ public class BackgroundGeolocationService extends Service {
 
     private void handleLocationChanged(android.location.Location location) {
         startWatchdog();
+        if (nativePostUrl != null) {
+            postLocationNatively(location);
+        }
         if (mediaPlayer != null) {
             double[] point = { location.getLongitude(), location.getLatitude() };
             var offRoute = distancePointToRoute(point) > distanceThreshold;
@@ -180,6 +238,48 @@ public class BackgroundGeolocationService extends Service {
         intent.putExtra("location", location);
         intent.putExtra("id", callbackId);
         LocalBroadcastManager.getInstance(getApplicationContext()).sendBroadcast(intent);
+    }
+
+    // Delivers a location to the configured URL from native code, so it works
+    // even when the WebView/JavaScript layer no longer exists.
+    private void postLocationNatively(android.location.Location location) {
+        if (postExecutor == null) {
+            postExecutor = Executors.newSingleThreadExecutor();
+        }
+        Context context = getApplicationContext();
+        JSONObject payload = locationToJson(location);
+        postExecutor.execute(() -> {
+            try {
+                LocationStore.sendLocation(context, payload);
+            } catch (Exception e) {
+                Logger.error("Native location POST failed", e);
+            }
+        });
+    }
+
+    private static JSONObject locationToJson(android.location.Location location) {
+        JSONObject obj = new JSONObject();
+        try {
+            obj.put("latitude", location.getLatitude());
+            obj.put("longitude", location.getLongitude());
+            obj.put("accuracy", location.hasAccuracy() ? location.getAccuracy() : JSONObject.NULL);
+            obj.put("altitude", location.hasAltitude() ? location.getAltitude() : JSONObject.NULL);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && location.hasVerticalAccuracy()) {
+                obj.put("altitudeAccuracy", location.getVerticalAccuracyMeters());
+            } else {
+                obj.put("altitudeAccuracy", JSONObject.NULL);
+            }
+            obj.put("simulated", location.isFromMockProvider());
+            obj.put("speed", location.hasSpeed() ? location.getSpeed() : JSONObject.NULL);
+            obj.put("bearing", location.hasBearing() ? location.getBearing() : JSONObject.NULL);
+            obj.put("time", location.getTime());
+            // Lets the server distinguish native-delivered updates from those
+            // forwarded by the JavaScript callback.
+            obj.put("source", "native");
+        } catch (org.json.JSONException e) {
+            Logger.error("Could not serialize location", e);
+        }
+        return obj;
     }
 
     // Android API < 30 requires these legacy callbacks to be implemented.
@@ -201,51 +301,73 @@ public class BackgroundGeolocationService extends Service {
         };
     }
 
+    private void requestLocationUpdates() {
+        try {
+            client.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, currentDistanceFilter, locationCallback);
+        } catch (SecurityException ignore) {
+            // According to Android Studio, this method can throw a Security Exception if
+            // permissions are not yet granted. Rather than check the permissions, which is fiddly,
+            // we simply ignore the exception.
+        }
+    }
+
+    // Promote the service to the foreground if necessary.
+    // Ideally we would only call 'startForeground' if the service is not already
+    // foregrounded. Unfortunately, 'getForegroundServiceType' was only introduced
+    // in API level 29 and seems to behave weirdly, as reported in #120. However,
+    // it appears that 'startForeground' is idempotent, so we just call it repeatedly
+    // each time a background watcher is added.
+    private void promoteToForeground(String notificationTitle, String notificationMessage) {
+        try {
+            // This method has been known to fail due to weird
+            // permission bugs, so we prevent any exceptions from
+            // crashing the app.
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(
+                    NOTIFICATION_ID,
+                    createBackgroundNotification(notificationTitle, notificationMessage),
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+                );
+            } else {
+                startForeground(NOTIFICATION_ID, createBackgroundNotification(notificationTitle, notificationMessage));
+            }
+        } catch (Exception exception) {
+            Logger.error("Failed to foreground service", exception);
+        }
+    }
+
     // Handles requests from the activity.
     public class LocalBinder extends Binder {
 
-        void start(final String id, final String notificationTitle, final String notificationMessage, float distanceFilter) {
+        void start(
+            final String id,
+            final String notificationTitle,
+            final String notificationMessage,
+            float distanceFilter,
+            final String url
+        ) {
             releaseMediaPlayer();
             acquireWakeLock();
             client = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
             callbackId = id;
             currentDistanceFilter = distanceFilter;
 
+            nativePostUrl = (url == null || url.isEmpty()) ? null : url;
+            LocationStore.saveSetup(getApplicationContext(), nativePostUrl, notificationTitle, notificationMessage, distanceFilter);
+
+            // The service may already be running (for example after a sticky
+            // restart), so drop any previous listener before registering a new one.
+            if (locationCallback != null) {
+                client.removeUpdates(locationCallback);
+            }
             locationCallback = createLocationListener(BackgroundGeolocationService.this);
-
-            try {
-                client.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, distanceFilter, locationCallback);
-            } catch (SecurityException ignore) {
-                // According to Android Studio, this method can throw a Security Exception if
-                // permissions are not yet granted. Rather than check the permissions, which is fiddly,
-                // we simply ignore the exception.
-            }
-
-            // Promote the service to the foreground if necessary.
-            // Ideally we would only call 'startForeground' if the service is not already
-            // foregrounded. Unfortunately, 'getForegroundServiceType' was only introduced
-            // in API level 29 and seems to behave weirdly, as reported in #120. However,
-            // it appears that 'startForeground' is idempotent, so we just call it repeatedly
-            // each time a background watcher is added.
-            try {
-                // This method has been known to fail due to weird
-                // permission bugs, so we prevent any exceptions from
-                // crashing the app.
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    startForeground(
-                        NOTIFICATION_ID,
-                        createBackgroundNotification(notificationTitle, notificationMessage),
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
-                    );
-                } else {
-                    startForeground(NOTIFICATION_ID, createBackgroundNotification(notificationTitle, notificationMessage));
-                }
-            } catch (Exception exception) {
-                Logger.error("Failed to foreground service", exception);
-            }
+            requestLocationUpdates();
+            promoteToForeground(notificationTitle, notificationMessage);
         }
 
         String stop() {
+            LocationStore.clear(getApplicationContext());
+            nativePostUrl = null;
             stopWatchdog();
             client.removeUpdates(locationCallback);
             stopForeground(true);
