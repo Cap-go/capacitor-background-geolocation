@@ -130,22 +130,21 @@ export interface StartOptions {
    */
   distanceFilter?: number;
   /**
-   * Android only. When set, each location update is additionally delivered by
-   * POSTing it as JSON directly from the native foreground service to this URL,
-   * in parallel with the JavaScript callback.
+   * When set, each location update is additionally delivered by POSTing it as
+   * JSON to this URL directly from native code, in parallel with the
+   * JavaScript callback. The request body matches the `Location` object, plus
+   * an extra `"source": "native"` field so the server can tell native POSTs
+   * apart from updates forwarded by the JavaScript layer.
    *
-   * This exists because the JavaScript callback stops firing once the WebView is
-   * destroyed — for example when the user swipes the app away from the recents
-   * list. Native delivery keeps working in that case: the foreground service is
-   * kept alive and restarted by the system (`START_STICKY`) so location POSTs
-   * continue even after the app process is killed. Locations sent this way carry
-   * an extra `"source": "native"` field so the server can tell them apart from
-   * updates forwarded by the JavaScript layer.
+   * Native delivery does not depend on the WebView. On Android, the foreground
+   * service is kept alive and restarted by the system (`START_STICKY`), so
+   * location POSTs continue even after the user swipes the app away from the
+   * recents list and its process is killed. On iOS, locations are POSTed
+   * natively for as long as the system keeps the app running; iOS itself stops
+   * location updates when the user terminates the app (an OS restriction — iOS
+   * has no equivalent of Android's restartable foreground service).
    *
-   * The request body matches the `Location` object. On iOS this option has no
-   * effect (delivery there follows the standard callback path).
-   *
-   * @since 8.1.2
+   * @since 8.2.0
    * @example "https://api.example.com/locations"
    */
   url?: string;

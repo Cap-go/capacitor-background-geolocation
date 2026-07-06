@@ -76,6 +76,9 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     private var pendingGeofenceAddCalls: [String: CAPPluginCall] = [:]
     private var pendingGeofenceRegions: [String: (region: CLCircularRegion, payload: [String: Any])] = [:]
     private var lastGeofenceTransition: [String: String] = [:]
+    // When set (via the "url" start option), each valid location is also POSTed
+    // as JSON directly from native code, independently of the WebView.
+    private var locationBackendUrl: URL?
 
     private let geofenceUrlKey = "CapgoBackgroundGeolocation.geofence.url"
     private let geofenceNotifyOnEntryKey = "CapgoBackgroundGeolocation.geofence.notifyOnEntry"
@@ -102,6 +105,17 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             // Check if already started
             if self.locationManager != nil {
                 return call.reject("Location tracking already started", "ALREADY_STARTED")
+            }
+            // Optional native delivery endpoint (same validation as setupGeofencing).
+            if let urlString = call.getString("url"), !urlString.isEmpty {
+                guard let url = URL(string: urlString),
+                      let scheme = url.scheme?.lowercased(),
+                      ["http", "https"].contains(scheme) else {
+                    return call.reject("Given url is not valid")
+                }
+                self.locationBackendUrl = url
+            } else {
+                self.locationBackendUrl = nil
             }
             // Create fresh location manager and initialize date
             self.locationManager = CLLocationManager()
@@ -177,6 +191,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             self.locationManager?.delegate = nil
             self.locationManager = nil
             self.created = nil
+            self.locationBackendUrl = nil
 
             if let callbackId = self.activeCallbackId {
                 if let savedCall = self.bridge?.savedCall(withID: callbackId) {
@@ -565,14 +580,68 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
               let body = try? JSONSerialization.data(withJSONObject: data) else {
             return
         }
-        var request = URLRequest(url: backendUrl)
+        postJson(body, to: backendUrl, taskName: "CapgoGeofenceTransition")
+    }
+
+    // Like formatLocation, but safe for JSONSerialization: the bridge's
+    // optional-based null sentinel cannot be serialized, so missing values are
+    // encoded as NSNull instead. Includes "source": "native" so the server can
+    // distinguish native POSTs from updates forwarded by the JavaScript layer.
+    private func locationPayload(_ location: CLLocation) -> [String: Any] {
+        var simulated = false
+        if #available(iOS 15, *) {
+            if let sourceInfo = location.sourceInformation {
+                simulated = sourceInfo.isSimulatedBySoftware
+            }
+        }
+        var data: [String: Any] = [
+            "latitude": location.coordinate.latitude,
+            "longitude": location.coordinate.longitude,
+            "accuracy": location.horizontalAccuracy,
+            "altitude": location.altitude,
+            "altitudeAccuracy": location.verticalAccuracy,
+            "simulated": simulated,
+            "time": NSNumber(
+                value: Int(
+                    location.timestamp.timeIntervalSince1970 * 1000
+                )
+            ),
+            "source": "native"
+        ]
+        if location.speed < 0 {
+            data["speed"] = NSNull()
+        } else {
+            data["speed"] = location.speed
+        }
+        if location.course < 0 {
+            data["bearing"] = NSNull()
+        } else {
+            data["bearing"] = location.course
+        }
+        return data
+    }
+
+    // Delivers a location to the configured URL from native code, in parallel
+    // with (and independently of) the JavaScript callback.
+    private func postLocation(_ location: CLLocation) {
+        guard let backendUrl = locationBackendUrl else { return }
+        let data = locationPayload(location)
+        guard JSONSerialization.isValidJSONObject(data),
+              let body = try? JSONSerialization.data(withJSONObject: data) else {
+            return
+        }
+        postJson(body, to: backendUrl, taskName: "CapgoLocationUpdate")
+    }
+
+    private func postJson(_ body: Data, to url: URL, taskName: String) {
+        var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
         request.httpBody = body
 
         var backgroundTask = UIBackgroundTaskIdentifier.invalid
-        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: "CapgoGeofenceTransition") {
+        backgroundTask = UIApplication.shared.beginBackgroundTask(withName: taskName) {
             if backgroundTask != .invalid {
                 UIApplication.shared.endBackgroundTask(backgroundTask)
                 backgroundTask = .invalid
@@ -742,15 +811,20 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     ) {
         guard manager === locationManager,
               let location = locations.last,
-              let callbackId = activeCallbackId,
-              let call = self.bridge?.savedCall(withID: callbackId) else {
+              isLocationValid(location) else {
             return
         }
 
-        if isLocationValid(location) {
-            checkRouteDeviation(location)
-            return call.resolve(formatLocation(location))
+        // Native delivery does not depend on the bridge, so it keeps working
+        // even if the WebView is gone.
+        postLocation(location)
+
+        guard let callbackId = activeCallbackId,
+              let call = self.bridge?.savedCall(withID: callbackId) else {
+            return
         }
+        checkRouteDeviation(location)
+        return call.resolve(formatLocation(location))
     }
 
     public func locationManager(
