@@ -119,6 +119,10 @@ export interface StartOptions {
    * The distance in meters that the device must move before a new location update is triggered.
    * This is used to filter out small movements and reduce the number of updates.
    *
+   * A non-zero value suppresses updates while the device is stationary (for
+   * example a parked vehicle). Use {@link StartOptions.minIntervalMs} when you
+   * need a lower update rate but still want periodic points without movement.
+   *
    * @since 7.0.9
    * @default 0
    * @example
@@ -144,10 +148,46 @@ export interface StartOptions {
    * location updates when the user terminates the app (an OS restriction — iOS
    * has no equivalent of Android's restartable foreground service).
    *
+   * Delivery is best-effort: there is no on-disk queue and no automatic retry.
+   * Failed POSTs are logged and dropped. A flaky network can delay in-flight
+   * requests, but points are not persisted across process death.
+   *
    * @since 8.2.0
    * @example "https://api.example.com/locations"
    */
   url?: string;
+  /**
+   * Extra HTTP headers for the native POST described by {@link StartOptions.url}.
+   * Ignored when `url` is not set.
+   *
+   * On Android these headers are persisted next to `url` so a sticky service
+   * restart can keep authenticating. Prefer a narrowly scoped, long-lived token
+   * for this path, or call {@link BackgroundGeolocationPlugin.updateHeaders}
+   * when credentials rotate. On iOS location headers stay in memory for the
+   * tracking session.
+   *
+   * @since 8.3.3
+   * @example { "Authorization": "Bearer <token>" }
+   */
+  headers?: Record<string, string>;
+  /**
+   * Minimum interval between native location POSTs, in milliseconds.
+   * `0` or unset keeps the current behaviour (every provider update).
+   *
+   * Applied as the Android `requestLocationUpdates` interval (advisory) and as a
+   * hard gate immediately before each native POST on both platforms. A point
+   * older than the last one sent still passes through (late update, not a
+   * faster one).
+   *
+   * Note: a non-zero {@link StartOptions.distanceFilter} suppresses updates while
+   * the device is stationary, so it cannot substitute for a time interval when
+   * you still need periodic parked-vehicle heartbeats.
+   *
+   * @since 8.3.3
+   * @default 0
+   * @example 120000
+   */
+  minIntervalMs?: number;
 }
 
 /**
@@ -289,10 +329,26 @@ export interface GeofenceSetupOptions {
    *
    * On Android, native background POST delivery requires `backgroundLocation: true`.
    *
+   * Delivery is best-effort: there is no on-disk queue and no automatic retry.
+   * Failed POSTs are logged and dropped.
+   *
    * @since 8.0.30
    * @example "https://api.example.com/geofences"
    */
   url?: string;
+
+  /**
+   * Extra HTTP headers for the native POST described by {@link GeofenceSetupOptions.url}.
+   * Ignored when `url` is not set.
+   *
+   * Headers are persisted with the geofence setup so transitions that fire after
+   * process restart can still authenticate. Prefer a narrowly scoped token, or
+   * call {@link BackgroundGeolocationPlugin.updateHeaders} when credentials rotate.
+   *
+   * @since 8.3.3
+   * @example { "Authorization": "Bearer <token>" }
+   */
+  headers?: Record<string, string>;
 
   /**
    * Whether entry transitions should be monitored.
@@ -547,6 +603,24 @@ export interface GeofenceErrorEvent {
 }
 
 /**
+ * Options for {@link BackgroundGeolocationPlugin.updateHeaders}.
+ *
+ * @since 8.3.3
+ */
+export interface UpdateHeadersOptions {
+  /**
+   * Replacement HTTP headers for native POSTs configured via `url`.
+   *
+   * Applies to an active location watcher and to geofence setup when those
+   * features have a `url`. Pass an empty object to clear custom headers.
+   *
+   * @since 8.3.3
+   * @example { "Authorization": "Bearer <token>" }
+   */
+  headers: Record<string, string>;
+}
+
+/**
  * Main plugin interface for background geolocation functionality.
  * Provides methods to manage location updates and access device settings.
  *
@@ -595,6 +669,24 @@ export interface BackgroundGeolocationPlugin {
    * await BackgroundGeolocation.stop();
    */
   stop(): Promise<void>;
+
+  /**
+   * Replaces HTTP headers used by native POSTs without restarting tracking.
+   *
+   * Use this when an access token expires while `url` delivery is active.
+   * Headers apply to the running location watcher and to geofence setup when
+   * those features have a configured `url`.
+   *
+   * @param options The replacement headers
+   * @returns A promise that resolves when headers are updated
+   *
+   * @since 8.3.3
+   * @example
+   * await BackgroundGeolocation.updateHeaders({
+   *   headers: { Authorization: "Bearer <new-token>" },
+   * });
+   */
+  updateHeaders(options: UpdateHeadersOptions): Promise<void>;
 
   /**
    * Opens the device's location settings page.

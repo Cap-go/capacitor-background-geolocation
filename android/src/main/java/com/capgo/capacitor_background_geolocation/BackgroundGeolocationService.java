@@ -21,6 +21,7 @@ import android.os.Looper;
 import android.os.PowerManager;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import com.getcapacitor.Logger;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.json.JSONObject;
@@ -51,6 +52,7 @@ public class BackgroundGeolocationService extends Service {
     private Runnable watchdogRunnable;
     private Runnable restartRunnable;
     private float currentDistanceFilter;
+    private long currentMinIntervalMs;
     private PowerManager.WakeLock wakeLock;
 
     // When set (via the "url" start option), each location is also POSTed to
@@ -115,6 +117,7 @@ public class BackgroundGeolocationService extends Service {
             acquireWakeLock();
             client = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
             currentDistanceFilter = LocationStore.getDistanceFilter(context);
+            currentMinIntervalMs = LocationStore.getMinIntervalMs(context);
             locationCallback = createLocationListener(this);
             requestLocationUpdates();
             startWatchdog();
@@ -195,7 +198,7 @@ public class BackgroundGeolocationService extends Service {
                 return;
             }
             try {
-                client.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, currentDistanceFilter, locationCallback);
+                client.requestLocationUpdates(LocationManager.GPS_PROVIDER, locationIntervalMs(), currentDistanceFilter, locationCallback);
             } catch (SecurityException ignore) {
                 // Permission issues are handled in the start() method
             }
@@ -301,9 +304,13 @@ public class BackgroundGeolocationService extends Service {
         };
     }
 
+    private long locationIntervalMs() {
+        return currentMinIntervalMs > 0 ? currentMinIntervalMs : 1000L;
+    }
+
     private void requestLocationUpdates() {
         try {
-            client.requestLocationUpdates(LocationManager.GPS_PROVIDER, 1000, currentDistanceFilter, locationCallback);
+            client.requestLocationUpdates(LocationManager.GPS_PROVIDER, locationIntervalMs(), currentDistanceFilter, locationCallback);
         } catch (SecurityException ignore) {
             // According to Android Studio, this method can throw a Security Exception if
             // permissions are not yet granted. Rather than check the permissions, which is fiddly,
@@ -344,16 +351,27 @@ public class BackgroundGeolocationService extends Service {
             final String notificationTitle,
             final String notificationMessage,
             float distanceFilter,
-            final String url
+            final String url,
+            final Map<String, String> headers,
+            final long minIntervalMs
         ) {
             releaseMediaPlayer();
             acquireWakeLock();
             client = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
             callbackId = id;
             currentDistanceFilter = distanceFilter;
+            currentMinIntervalMs = Math.max(0L, minIntervalMs);
 
             nativePostUrl = (url == null || url.isEmpty()) ? null : url;
-            LocationStore.saveSetup(getApplicationContext(), nativePostUrl, notificationTitle, notificationMessage, distanceFilter);
+            LocationStore.saveSetup(
+                getApplicationContext(),
+                nativePostUrl,
+                notificationTitle,
+                notificationMessage,
+                distanceFilter,
+                headers,
+                currentMinIntervalMs
+            );
 
             // The service may already be running (for example after a sticky
             // restart), so drop any previous listener before registering a new one.
@@ -363,6 +381,10 @@ public class BackgroundGeolocationService extends Service {
             locationCallback = createLocationListener(BackgroundGeolocationService.this);
             requestLocationUpdates();
             promoteToForeground(notificationTitle, notificationMessage);
+        }
+
+        void updateHeaders(final Map<String, String> headers) {
+            LocationStore.saveHeaders(getApplicationContext(), headers);
         }
 
         String stop() {

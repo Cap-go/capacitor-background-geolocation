@@ -34,7 +34,10 @@ import com.google.android.gms.location.GeofencingRequest;
 import com.google.android.gms.location.LocationServices;
 import java.net.URL;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Iterator;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import org.json.JSONArray;
@@ -117,9 +120,31 @@ public class BackgroundGeolocation extends Plugin {
                 call.getString("backgroundTitle", "Using your location"),
                 call.getString("backgroundMessage", ""),
                 call.getFloat("distanceFilter", 0f),
-                call.getString("url", null)
+                call.getString("url", null),
+                headersFromCall(call),
+                call.getLong("minIntervalMs", 0L)
             );
         });
+    }
+
+    @PluginMethod
+    public void updateHeaders(PluginCall call) {
+        Map<String, String> headers = headersFromObject(call.getObject("headers", new JSObject()));
+        LocationStore.saveHeaders(getContext(), headers);
+        GeofenceStore.saveHeaders(getContext(), headers);
+        if (serviceConnectionFuture != null) {
+            getServiceConnection()
+                .thenAccept((serviceBinder) -> {
+                    serviceBinder.updateHeaders(headers);
+                    call.resolve();
+                })
+                .exceptionally((throwable) -> {
+                    call.reject("Failed to update headers: " + throwable.getMessage());
+                    return null;
+                });
+            return;
+        }
+        call.resolve();
     }
 
     private CompletableFuture<Void> requestLocationPermissions(PluginCall call) {
@@ -355,7 +380,8 @@ public class BackgroundGeolocation extends Plugin {
             call.getBoolean("notifyOnEntry", true),
             call.getBoolean("notifyOnExit", true),
             payload,
-            backgroundLocation
+            backgroundLocation,
+            headersFromCall(call)
         );
 
         if (!call.getBoolean("requestPermissions", true)) {
@@ -610,6 +636,27 @@ public class BackgroundGeolocation extends Plugin {
                 Settings.Secure.LOCATION_MODE_OFF
             );
         }
+    }
+
+    private static Map<String, String> headersFromCall(PluginCall call) {
+        return headersFromObject(call.getObject("headers"));
+    }
+
+    private static Map<String, String> headersFromObject(JSObject headers) {
+        Map<String, String> result = new HashMap<>();
+        if (headers == null) {
+            return result;
+        }
+        Iterator<String> keys = headers.keys();
+        while (keys.hasNext()) {
+            String key = keys.next();
+            Object value = headers.opt(key);
+            if (value == null || value == JSONObject.NULL) {
+                continue;
+            }
+            result.put(key, String.valueOf(value));
+        }
+        return result;
     }
 
     private static JSObject formatLocation(Location location) {

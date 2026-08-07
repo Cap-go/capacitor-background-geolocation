@@ -12,6 +12,7 @@ import type {
   MonitoredGeofencesResult,
   GeofenceTransitionEvent,
   BackgroundGeolocationPermissionStatus,
+  UpdateHeadersOptions,
 } from './definitions';
 
 interface WebGeofence {
@@ -36,6 +37,7 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
   private distanceThreshold = 50;
   private geofences = new Map<string, WebGeofence>();
   private geofenceUrl: string | undefined;
+  private geofenceHeaders: Record<string, string> = {};
   private geofencePayload: Record<string, unknown> = {};
   private notifyOnEntry = true;
   private notifyOnExit = true;
@@ -130,9 +132,14 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
       new URL(options.url);
     }
     this.geofenceUrl = options.url;
+    this.geofenceHeaders = { ...(options.headers ?? {}) };
     this.notifyOnEntry = options.notifyOnEntry ?? true;
     this.notifyOnExit = options.notifyOnExit ?? true;
     this.geofencePayload = options.payload ?? {};
+  }
+
+  async updateHeaders(options: UpdateHeadersOptions): Promise<void> {
+    this.geofenceHeaders = { ...(options.headers ?? {}) };
   }
 
   async addGeofence(options: AddGeofenceOptions): Promise<void> {
@@ -275,6 +282,7 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
+          ...this.geofenceHeaders,
         },
         body: JSON.stringify(event),
       }).catch(() => undefined);
