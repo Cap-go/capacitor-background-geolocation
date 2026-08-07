@@ -79,8 +79,13 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     // When set (via the "url" start option), each valid location is also POSTed
     // as JSON directly from native code, independently of the WebView.
     private var locationBackendUrl: URL?
+    private var locationHeaders: [String: String] = [:]
+    private var geofenceHeaders: [String: String] = [:]
+    private var minIntervalMs: Double = 0
+    private var lastPostedLocationTime: Date?
 
     private let geofenceUrlKey = "CapgoBackgroundGeolocation.geofence.url"
+    private let geofenceHeadersKey = "CapgoBackgroundGeolocation.geofence.headers"
     private let geofenceNotifyOnEntryKey = "CapgoBackgroundGeolocation.geofence.notifyOnEntry"
     private let geofenceNotifyOnExitKey = "CapgoBackgroundGeolocation.geofence.notifyOnExit"
     private let geofencePayloadKey = "CapgoBackgroundGeolocation.geofence.payload"
@@ -117,6 +122,9 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             } else {
                 self.locationBackendUrl = nil
             }
+            self.locationHeaders = self.stringHeaders(from: call.getObject("headers"))
+            self.minIntervalMs = max(0, call.getDouble("minIntervalMs") ?? 0)
+            self.lastPostedLocationTime = nil
             // Create fresh location manager and initialize date
             self.locationManager = CLLocationManager()
             guard let manager = self.locationManager else {
@@ -192,6 +200,9 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             self.locationManager = nil
             self.created = nil
             self.locationBackendUrl = nil
+            self.locationHeaders = [:]
+            self.minIntervalMs = 0
+            self.lastPostedLocationTime = nil
 
             if let callbackId = self.activeCallbackId {
                 if let savedCall = self.bridge?.savedCall(withID: callbackId) {
@@ -200,6 +211,16 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
                 self.activeCallbackId = nil
             }
             return call.resolve()
+        }
+    }
+
+    @objc func updateHeaders(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            let headers = self.stringHeaders(from: call.getObject("headers"))
+            self.locationHeaders = headers
+            self.geofenceHeaders = headers
+            self.persistGeofenceConfiguration()
+            call.resolve()
         }
     }
 
@@ -315,6 +336,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             }
 
             self.geofenceBackendUrl = backendUrl
+            self.geofenceHeaders = self.stringHeaders(from: call.getObject("headers"))
             self.geofenceNotifyOnEntry = call.getBool("notifyOnEntry") ?? true
             self.geofenceNotifyOnExit = call.getBool("notifyOnExit") ?? true
             self.geofencePayload = payload
@@ -477,6 +499,12 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         } else {
             defaults.removeObject(forKey: geofencePayloadKey)
         }
+        if JSONSerialization.isValidJSONObject(geofenceHeaders),
+           let data = try? JSONSerialization.data(withJSONObject: geofenceHeaders) {
+            defaults.set(data, forKey: geofenceHeadersKey)
+        } else {
+            defaults.removeObject(forKey: geofenceHeadersKey)
+        }
     }
 
     private func restoreGeofenceConfiguration() {
@@ -493,6 +521,10 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         if let data = defaults.data(forKey: geofencePayloadKey),
            let payload = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             geofencePayload = payload
+        }
+        if let data = defaults.data(forKey: geofenceHeadersKey),
+           let headers = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            geofenceHeaders = stringHeaders(from: headers)
         }
     }
 
@@ -580,7 +612,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
               let body = try? JSONSerialization.data(withJSONObject: data) else {
             return
         }
-        postJson(body, to: backendUrl, taskName: "CapgoGeofenceTransition")
+        postJson(body, to: backendUrl, headers: geofenceHeaders, taskName: "CapgoGeofenceTransition")
     }
 
     // Like formatLocation, but safe for JSONSerialization: the bridge's
@@ -623,21 +655,51 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
 
     // Delivers a location to the configured URL from native code, in parallel
     // with (and independently of) the JavaScript callback.
+    private func shouldPostLocation(_ location: CLLocation) -> Bool {
+        guard minIntervalMs > 0 else { return true }
+        guard let lastPostedLocationTime else { return true }
+        if location.timestamp < lastPostedLocationTime {
+            return true
+        }
+        let elapsedMs = location.timestamp.timeIntervalSince(lastPostedLocationTime) * 1000
+        return elapsedMs >= minIntervalMs
+    }
+
     private func postLocation(_ location: CLLocation) {
         guard let backendUrl = locationBackendUrl else { return }
+        guard shouldPostLocation(location) else { return }
         let data = locationPayload(location)
         guard JSONSerialization.isValidJSONObject(data),
               let body = try? JSONSerialization.data(withJSONObject: data) else {
             return
         }
-        postJson(body, to: backendUrl, taskName: "CapgoLocationUpdate")
+        lastPostedLocationTime = location.timestamp
+        postJson(body, to: backendUrl, headers: locationHeaders, taskName: "CapgoLocationUpdate")
     }
 
-    private func postJson(_ body: Data, to url: URL, taskName: String) {
+    private func stringHeaders(from object: [String: Any]?) -> [String: String] {
+        guard let object else { return [:] }
+        var headers: [String: String] = [:]
+        for (key, value) in object {
+            if let string = value as? String {
+                headers[key] = string
+            } else if let number = value as? NSNumber {
+                headers[key] = number.stringValue
+            } else {
+                headers[key] = String(describing: value)
+            }
+        }
+        return headers
+    }
+
+    private func postJson(_ body: Data, to url: URL, headers: [String: String], taskName: String) {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         request.addValue("application/json", forHTTPHeaderField: "Accept")
+        for (key, value) in headers {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
         request.httpBody = body
 
         var backgroundTask = UIBackgroundTaskIdentifier.invalid

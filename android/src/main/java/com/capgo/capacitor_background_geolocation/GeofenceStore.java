@@ -18,6 +18,7 @@ import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Set;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -31,6 +32,7 @@ final class GeofenceStore {
 
     private static final String PREFS_NAME = "CapgoBackgroundGeolocationGeofences";
     private static final String KEY_URL = "url";
+    private static final String KEY_HEADERS = "headers";
     private static final String KEY_NOTIFY_ON_ENTRY = "notifyOnEntry";
     private static final String KEY_NOTIFY_ON_EXIT = "notifyOnExit";
     private static final String KEY_BACKGROUND_LOCATION = "backgroundLocation";
@@ -46,19 +48,30 @@ final class GeofenceStore {
         boolean notifyOnEntry,
         boolean notifyOnExit,
         JSONObject payload,
-        boolean backgroundLocation
+        boolean backgroundLocation,
+        Map<String, String> headers
     ) {
         SharedPreferences.Editor editor = prefs(context).edit();
         if (url == null || url.isEmpty()) {
             editor.remove(KEY_URL);
+            editor.remove(KEY_HEADERS);
         } else {
             editor.putString(KEY_URL, url);
+            editor.putString(KEY_HEADERS, LocationStore.headersToJson(headers));
         }
         editor.putBoolean(KEY_NOTIFY_ON_ENTRY, notifyOnEntry);
         editor.putBoolean(KEY_NOTIFY_ON_EXIT, notifyOnExit);
         editor.putBoolean(KEY_BACKGROUND_LOCATION, backgroundLocation);
         editor.putString(KEY_PAYLOAD, payload == null ? new JSONObject().toString() : payload.toString());
         editor.apply();
+    }
+
+    static void saveHeaders(Context context, Map<String, String> headers) {
+        prefs(context).edit().putString(KEY_HEADERS, LocationStore.headersToJson(headers)).apply();
+    }
+
+    static Map<String, String> getHeaders(Context context) {
+        return LocationStore.headersFromJson(prefs(context).getString(KEY_HEADERS, null));
     }
 
     static String getUrl(Context context) {
@@ -215,6 +228,9 @@ final class GeofenceStore {
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Content-Type", "application/json");
             connection.setRequestProperty("Content-Length", String.valueOf(body.length));
+            for (Map.Entry<String, String> header : getHeaders(context).entrySet()) {
+                connection.setRequestProperty(header.getKey(), header.getValue());
+            }
             try (OutputStream outputStream = connection.getOutputStream()) {
                 outputStream.write(body);
             }
