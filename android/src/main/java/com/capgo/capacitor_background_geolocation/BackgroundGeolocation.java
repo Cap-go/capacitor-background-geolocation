@@ -122,7 +122,8 @@ public class BackgroundGeolocation extends Plugin {
                 call.getFloat("distanceFilter", 0f),
                 call.getString("url", null),
                 headersFromCall(call),
-                call.getLong("minIntervalMs", 0L)
+                call.getLong("minIntervalMs", 0L),
+                call.getBoolean("networkFallback", false)
             );
         });
     }

@@ -19,6 +19,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import com.getcapacitor.Logger;
 import java.util.Map;
@@ -54,6 +55,21 @@ public class BackgroundGeolocationService extends Service {
     private float currentDistanceFilter;
     private long currentMinIntervalMs;
     private PowerManager.WakeLock wakeLock;
+
+    // How long a GPS fix is considered "fresh" before we allow a NETWORK_PROVIDER fix through.
+    private static final long NETWORK_FALLBACK_GRACE_MS = 20000L;
+
+    // Max acceptable accuracy radius (meters) for a NETWORK_PROVIDER fix; missing accuracy counts
+    // as too imprecise too.
+    private static final float NETWORK_FIX_MAX_ACCURACY_M = 300f;
+
+    // elapsedRealtime() of the last GPS_PROVIDER fix, or 0 if none yet. Monotonic, so it can't be
+    // confused by wall-clock adjustments the way System.currentTimeMillis() could.
+    private volatile long lastGpsFixAtMs = 0L;
+
+    // Opt-in flag for the NETWORK_PROVIDER fallback below; set via the "networkFallback" start
+    // option. Defaults to off, so GPS-only accuracy is unchanged unless a caller asks for it.
+    private volatile boolean networkFallbackEnabled = false;
 
     // When set (via the "url" start option), each location is also POSTed to
     // this URL directly from native code so delivery survives the WebView being
@@ -118,6 +134,7 @@ public class BackgroundGeolocationService extends Service {
             client = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
             currentDistanceFilter = LocationStore.getDistanceFilter(context);
             currentMinIntervalMs = LocationStore.getMinIntervalMs(context);
+            networkFallbackEnabled = LocationStore.getNetworkFallback(context);
             locationCallback = createLocationListener(this);
             requestLocationUpdates();
             startWatchdog();
@@ -197,11 +214,7 @@ public class BackgroundGeolocationService extends Service {
             if (client == null || locationCallback == null) {
                 return;
             }
-            try {
-                client.requestLocationUpdates(LocationManager.GPS_PROVIDER, locationIntervalMs(), currentDistanceFilter, locationCallback);
-            } catch (SecurityException ignore) {
-                // Permission issues are handled in the start() method
-            }
+            requestLocationUpdates();
             startWatchdog();
         };
         watchdogHandler.postDelayed(restartRunnable, 10000);
@@ -225,6 +238,18 @@ public class BackgroundGeolocationService extends Service {
     }
 
     private void handleLocationChanged(android.location.Location location) {
+        if (LocationManager.GPS_PROVIDER.equals(location.getProvider())) {
+            lastGpsFixAtMs = SystemClock.elapsedRealtime();
+        } else if (LocationManager.NETWORK_PROVIDER.equals(location.getProvider())) {
+            boolean gpsStillFresh =
+                lastGpsFixAtMs != 0 && (SystemClock.elapsedRealtime() - lastGpsFixAtMs) < NETWORK_FALLBACK_GRACE_MS;
+            boolean tooImprecise = !location.hasAccuracy() || location.getAccuracy() > NETWORK_FIX_MAX_ACCURACY_M;
+            if (gpsStillFresh || tooImprecise) {
+                // Drop it - and skip startWatchdog() below so a run of rejected fixes can't mask a
+                // genuinely stalled GPS_PROVIDER and suppress the restart that would recover it.
+                return;
+            }
+        }
         startWatchdog();
         if (nativePostUrl != null) {
             postLocationNatively(location);
@@ -316,6 +341,21 @@ public class BackgroundGeolocationService extends Service {
             // permissions are not yet granted. Rather than check the permissions, which is fiddly,
             // we simply ignore the exception.
         }
+        if (!networkFallbackEnabled) {
+            return;
+        }
+        // GPS_PROVIDER can go quiet for extended periods in the background or with poor sky
+        // visibility. Request NETWORK_PROVIDER on the same listener as a fallback; whichever
+        // fires first reaches handleLocationChanged(). No manifest change needed -
+        // ACCESS_COARSE_LOCATION is already declared. isProviderEnabled guards against devices
+        // with network location turned off.
+        try {
+            if (client.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
+                client.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, locationIntervalMs(), currentDistanceFilter, locationCallback);
+            }
+        } catch (SecurityException ignore) {
+            // Same rationale as the GPS_PROVIDER catch above.
+        }
     }
 
     // Promote the service to the foreground if necessary.
@@ -353,14 +393,17 @@ public class BackgroundGeolocationService extends Service {
             float distanceFilter,
             final String url,
             final Map<String, String> headers,
-            final long minIntervalMs
+            final long minIntervalMs,
+            final boolean networkFallback
         ) {
             releaseMediaPlayer();
             acquireWakeLock();
             client = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
+            lastGpsFixAtMs = 0L;
             callbackId = id;
             currentDistanceFilter = distanceFilter;
             currentMinIntervalMs = Math.max(0L, minIntervalMs);
+            networkFallbackEnabled = networkFallback;
 
             nativePostUrl = (url == null || url.isEmpty()) ? null : url;
             LocationStore.saveSetup(
@@ -370,7 +413,8 @@ public class BackgroundGeolocationService extends Service {
                 notificationMessage,
                 distanceFilter,
                 headers,
-                currentMinIntervalMs
+                currentMinIntervalMs,
+                networkFallback
             );
 
             // The service may already be running (for example after a sticky
