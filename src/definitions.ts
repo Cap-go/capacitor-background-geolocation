@@ -188,6 +188,28 @@ export interface StartOptions {
    * @example 120000
    */
   minIntervalMs?: number;
+  /**
+   * Android only - has no effect on iOS. Whether to fall back to
+   * `NETWORK_PROVIDER` (cell/Wi-Fi based location) when `GPS_PROVIDER` has
+   * not delivered a fix recently. GPS can go quiet for extended periods when
+   * the app is backgrounded, the screen is locked, or the device has weak
+   * sky visibility (indoors, dense urban areas); the network fallback fills
+   * those gaps with a coarser, but far more reliably delivered, fix.
+   *
+   * GPS always takes priority: a network fix is only used once GPS has been
+   * silent for 20+ seconds, and is dropped if its reported accuracy is worse
+   * than 300m or unreported.
+   *
+   * Defaults to `false`, so existing GPS-only accuracy characteristics are
+   * unchanged unless you opt in.
+   *
+   * @since 8.5.0
+   * @default false
+   * @example
+   * // Fill gaps in GPS coverage with a coarser network-based location
+   * networkFallback: true
+   */
+  networkFallback?: boolean;
 }
 
 /**
