@@ -808,11 +808,18 @@ public class BackgroundGeolocation extends Plugin {
             call.reject(
                 "Cannot start background location while the app is in the background. Bring the app to the foreground and call start() again.",
                 "FOREGROUND_SERVICE_START_NOT_ALLOWED",
-                cause
+                toException(cause)
             );
             return;
         }
-        call.reject("Failed to start background location service: " + cause.getMessage(), cause);
+        call.reject("Failed to start background location service: " + cause.getMessage(), toException(cause));
+    }
+
+    private static Exception toException(Throwable throwable) {
+        if (throwable instanceof Exception) {
+            return (Exception) throwable;
+        }
+        return new Exception(throwable);
     }
 
     static boolean isForegroundServiceStartNotAllowed(Throwable throwable) {
