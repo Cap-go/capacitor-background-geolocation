@@ -798,8 +798,10 @@ public class BackgroundGeolocation extends Plugin {
 
             @Override
             public void onServiceDisconnected(ComponentName name) {
-                serviceConnection = null;
-                serviceConnectionFuture = null;
+                if (serviceConnectionFuture == connectionFuture) {
+                    serviceConnection = null;
+                    serviceConnectionFuture = null;
+                }
             }
         };
         serviceConnection = connection;
