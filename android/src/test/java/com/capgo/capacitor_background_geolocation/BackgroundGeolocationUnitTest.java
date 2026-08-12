@@ -108,6 +108,28 @@ public class BackgroundGeolocationUnitTest {
     }
 
     @Test
+    public void testForegroundServiceStartNotAllowedDetection() {
+        assertTrue(
+            "ForegroundServiceStartNotAllowedException class name should be detected",
+            BackgroundGeolocation.isForegroundServiceStartNotAllowed(new ForegroundServiceStartNotAllowedException())
+        );
+        assertTrue(
+            "ServiceStartNotAllowedException class name should be detected",
+            BackgroundGeolocation.isForegroundServiceStartNotAllowed(new ServiceStartNotAllowedException())
+        );
+        assertTrue(
+            "Wrapped foreground service start failures should be detected",
+            BackgroundGeolocation.isForegroundServiceStartNotAllowed(
+                new RuntimeException("wrapped", new ForegroundServiceStartNotAllowedException())
+            )
+        );
+        assertFalse(
+            "Unrelated exceptions should not be treated as FGS start failures",
+            BackgroundGeolocation.isForegroundServiceStartNotAllowed(new IllegalStateException("other failure"))
+        );
+    }
+
+    @Test
     public void testBasicArithmetic() {
         // Basic sanity test
         assertEquals(4, 2 + 2);
@@ -189,4 +211,8 @@ public class BackgroundGeolocationUnitTest {
         throws NoSuchMethodException {
         assertEquals(listener.getClass(), listener.getClass().getDeclaredMethod(methodName, parameterTypes).getDeclaringClass());
     }
+
+    private static class ForegroundServiceStartNotAllowedException extends RuntimeException {}
+
+    private static class ServiceStartNotAllowedException extends RuntimeException {}
 }
