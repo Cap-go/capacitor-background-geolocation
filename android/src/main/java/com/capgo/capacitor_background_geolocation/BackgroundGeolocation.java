@@ -128,6 +128,7 @@ public class BackgroundGeolocation extends Plugin {
                 );
             })
             .exceptionally((throwable) -> {
+                serviceConnectionFuture = null;
                 rejectServiceStartFailure(call, throwable);
                 return null;
             });
@@ -783,21 +784,31 @@ public class BackgroundGeolocation extends Plugin {
             return connectionFuture;
         }
 
-        this.getContext().bindService(
-            serviceIntent,
-            new ServiceConnection() {
-                @Override
-                public void onServiceConnected(ComponentName name, IBinder binder) {
-                    connectionFuture.complete((BackgroundGeolocationService.LocalBinder) binder);
-                }
+        try {
+            boolean bound = this.getContext().bindService(
+                serviceIntent,
+                new ServiceConnection() {
+                    @Override
+                    public void onServiceConnected(ComponentName name, IBinder binder) {
+                        connectionFuture.complete((BackgroundGeolocationService.LocalBinder) binder);
+                    }
 
-                @Override
-                public void onServiceDisconnected(ComponentName name) {
-                    serviceConnectionFuture = null;
-                }
-            },
-            Context.BIND_AUTO_CREATE
-        );
+                    @Override
+                    public void onServiceDisconnected(ComponentName name) {
+                        serviceConnectionFuture = null;
+                    }
+                },
+                Context.BIND_AUTO_CREATE
+            );
+            if (!bound) {
+                IllegalStateException exception = new IllegalStateException("Failed to bind to background location service");
+                connectionFuture.completeExceptionally(exception);
+                serviceConnectionFuture = null;
+            }
+        } catch (SecurityException exception) {
+            connectionFuture.completeExceptionally(exception);
+            serviceConnectionFuture = null;
+        }
 
         return connectionFuture;
     }
