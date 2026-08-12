@@ -58,6 +58,7 @@ public class BackgroundGeolocation extends Plugin {
     private final String pluginVersion = "";
 
     private CompletableFuture<BackgroundGeolocationService.LocalBinder> serviceConnectionFuture;
+    private ServiceConnection serviceConnection;
     private CompletableFuture<Void> locationPermissionFuture;
     private CompletableFuture<Void> geofencePermissionFuture;
     private BroadcastReceiver serviceReceiver;
@@ -115,7 +116,8 @@ public class BackgroundGeolocation extends Plugin {
         if (call.getBoolean("stale", false)) {
             fetchLastLocation(call);
         }
-        getServiceConnection()
+        CompletableFuture<BackgroundGeolocationService.LocalBinder> connectionFuture = getServiceConnection();
+        connectionFuture
             .thenAccept((serviceBinder) -> {
                 serviceBinder.start(
                     call.getCallbackId(),
@@ -128,7 +130,11 @@ public class BackgroundGeolocation extends Plugin {
                 );
             })
             .exceptionally((throwable) -> {
-                serviceConnectionFuture = null;
+                if (serviceConnectionFuture == connectionFuture) {
+                    releaseServiceConnection();
+                    stopBackgroundService();
+                    serviceConnectionFuture = null;
+                }
                 rejectServiceStartFailure(call, throwable);
                 return null;
             });
@@ -771,7 +777,7 @@ public class BackgroundGeolocation extends Plugin {
         CompletableFuture<BackgroundGeolocationService.LocalBinder> connectionFuture = new CompletableFuture<>();
         serviceConnectionFuture = connectionFuture;
 
-        Intent serviceIntent = new Intent(this.getContext(), BackgroundGeolocationService.class);
+        Intent serviceIntent = createServiceIntent();
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 this.getContext().startForegroundService(serviceIntent);
@@ -784,33 +790,57 @@ public class BackgroundGeolocation extends Plugin {
             return connectionFuture;
         }
 
-        try {
-            boolean bound = this.getContext().bindService(
-                serviceIntent,
-                new ServiceConnection() {
-                    @Override
-                    public void onServiceConnected(ComponentName name, IBinder binder) {
-                        connectionFuture.complete((BackgroundGeolocationService.LocalBinder) binder);
-                    }
+        ServiceConnection connection = new ServiceConnection() {
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder binder) {
+                connectionFuture.complete((BackgroundGeolocationService.LocalBinder) binder);
+            }
 
-                    @Override
-                    public void onServiceDisconnected(ComponentName name) {
-                        serviceConnectionFuture = null;
-                    }
-                },
-                Context.BIND_AUTO_CREATE
-            );
+            @Override
+            public void onServiceDisconnected(ComponentName name) {
+                serviceConnection = null;
+                serviceConnectionFuture = null;
+            }
+        };
+        serviceConnection = connection;
+
+        try {
+            boolean bound = this.getContext().bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE);
             if (!bound) {
+                serviceConnection = null;
                 IllegalStateException exception = new IllegalStateException("Failed to bind to background location service");
                 connectionFuture.completeExceptionally(exception);
+                stopBackgroundService();
                 serviceConnectionFuture = null;
             }
         } catch (SecurityException exception) {
+            serviceConnection = null;
             connectionFuture.completeExceptionally(exception);
+            stopBackgroundService();
             serviceConnectionFuture = null;
         }
 
         return connectionFuture;
+    }
+
+    private Intent createServiceIntent() {
+        return new Intent(this.getContext(), BackgroundGeolocationService.class);
+    }
+
+    private void stopBackgroundService() {
+        getContext().stopService(createServiceIntent());
+    }
+
+    private void releaseServiceConnection() {
+        if (serviceConnection == null) {
+            return;
+        }
+        try {
+            getContext().unbindService(serviceConnection);
+        } catch (IllegalArgumentException ignored) {
+            // Service was not bound or already unbound.
+        }
+        serviceConnection = null;
     }
 
     private void rejectServiceStartFailure(PluginCall call, Throwable throwable) {
