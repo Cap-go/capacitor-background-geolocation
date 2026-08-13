@@ -6,9 +6,12 @@ import android.content.Intent;
 import android.location.Location;
 import android.location.LocationListener;
 import android.os.Bundle;
+import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
+import com.getcapacitor.PluginCall;
 import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofenceStatusCodes;
+import org.json.JSONException;
 import org.junit.Test;
 
 /**
@@ -105,6 +108,29 @@ public class BackgroundGeolocationUnitTest {
         );
         assertEquals(Geofence.GEOFENCE_TRANSITION_ENTER, GeofenceStore.geofenceTransitionTypes(true, false));
         assertEquals(Geofence.GEOFENCE_TRANSITION_EXIT, GeofenceStore.geofenceTransitionTypes(false, true));
+    }
+
+    @Test
+    public void testLongOptionFromCallCoercesIntegerBridgeValue() throws JSONException {
+        JSObject data = new JSObject();
+        data.put("minIntervalMs", 295_000);
+
+        PluginCall call = new PluginCall(null, "BackgroundGeolocation", "test-callback", "start", data);
+
+        assertEquals(
+            "JS numbers within Integer range must be read as minIntervalMs",
+            295_000L,
+            BackgroundGeolocation.longOptionFromCall(call, "minIntervalMs", 0L)
+        );
+        assertEquals("PluginCall.getLong misses Integer bridge values (issue #62)", Long.valueOf(0L), call.getLong("minIntervalMs", 0L));
+    }
+
+    @Test
+    public void testLongOptionFromCallUsesDefaultWhenMissing() {
+        PluginCall call = new PluginCall(null, "BackgroundGeolocation", "test-callback", "start", new JSObject());
+
+        assertEquals(0L, BackgroundGeolocation.longOptionFromCall(call, "minIntervalMs", 0L));
+        assertEquals(60_000L, BackgroundGeolocation.longOptionFromCall(call, "minIntervalMs", 60_000L));
     }
 
     @Test

@@ -126,7 +126,7 @@ public class BackgroundGeolocation extends Plugin {
                     call.getFloat("distanceFilter", 0f),
                     call.getString("url", null),
                     headersFromCall(call),
-                    call.getLong("minIntervalMs", 0L)
+                    longOptionFromCall(call, "minIntervalMs", 0L)
                 );
             })
             .exceptionally((throwable) -> {
@@ -649,6 +649,12 @@ public class BackgroundGeolocation extends Plugin {
                 Settings.Secure.LOCATION_MODE_OFF
             );
         }
+    }
+
+    // Capacitor's PluginCall.getLong() only reads Java Long values. JS numbers that
+    // fit in 32 bits cross the bridge as Integer, so optLong is required (issue #62).
+    static long longOptionFromCall(PluginCall call, String key, long defaultValue) {
+        return call.getData().optLong(key, defaultValue);
     }
 
     private static Map<String, String> headersFromCall(PluginCall call) {
