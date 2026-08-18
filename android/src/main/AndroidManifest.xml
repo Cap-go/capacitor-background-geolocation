@@ -3,7 +3,7 @@
         <service
             android:name="com.capgo.capacitor_background_geolocation.BackgroundGeolocationService"
             android:enabled="true"
-            android:exported="true"
+            android:exported="false"
             android:foregroundServiceType="location" />
 
         <receiver
@@ -35,6 +35,5 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-feature android:name="android.hardware.location.gps" />
+    <uses-feature android:name="android.hardware.location.gps" android:required="false" />
 </manifest>
-  

@@ -5,7 +5,6 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Build;
-import androidx.localbroadcastmanager.content.LocalBroadcastManager;
 import com.getcapacitor.Logger;
 import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofenceStatusCodes;
@@ -34,9 +33,7 @@ public class GeofenceBroadcastReceiver extends BroadcastReceiver {
                 JSONObject data = new JSONObject();
                 data.put("code", errorCode);
                 data.put("message", message);
-                Intent localIntent = new Intent(GeofenceStore.ACTION_GEOFENCE_ERROR);
-                localIntent.putExtra(GeofenceStore.EXTRA_GEOFENCE_ERROR, data.toString());
-                LocalBroadcastManager.getInstance(context).sendBroadcast(localIntent);
+                LocalEvents.emitGeofenceError(data.toString());
             } catch (Exception exception) {
                 Logger.error("Failed to emit geofence error", exception);
             }
@@ -57,9 +54,7 @@ public class GeofenceBroadcastReceiver extends BroadcastReceiver {
         try {
             for (Geofence geofence : triggeringGeofences) {
                 JSONObject data = GeofenceStore.buildTransitionData(context, geofence.getRequestId(), enter);
-                Intent localIntent = new Intent(GeofenceStore.ACTION_GEOFENCE_EVENT);
-                localIntent.putExtra(GeofenceStore.EXTRA_GEOFENCE_PAYLOAD, data.toString());
-                LocalBroadcastManager.getInstance(context).sendBroadcast(localIntent);
+                LocalEvents.emitGeofenceTransition(data.toString());
                 GeofenceStore.enqueueTransition(context, data);
             }
         } catch (Exception exception) {
