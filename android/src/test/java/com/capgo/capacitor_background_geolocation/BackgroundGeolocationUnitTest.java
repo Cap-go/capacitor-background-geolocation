@@ -4,8 +4,7 @@ import static org.junit.Assert.*;
 
 import android.content.Intent;
 import android.location.Location;
-import android.location.LocationListener;
-import android.os.Bundle;
+import androidx.core.location.LocationListenerCompat;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
 import com.getcapacitor.PluginCall;
@@ -55,12 +54,15 @@ public class BackgroundGeolocationUnitTest {
     }
 
     @Test
-    public void testLocationListenerImplementsLegacyCallbacks() throws Exception {
-        LocationListener listener = BackgroundGeolocationService.createLocationListener(null);
+    public void testLocationListenerImplementsLegacyCallbacks() {
+        // Android API < 30 invokes these callbacks, and the framework interface only gained
+        // no-op defaults for them in API 30. Returning a LocationListenerCompat ships those
+        // defaults inside the app, so the calls below resolve instead of throwing.
+        LocationListenerCompat listener = BackgroundGeolocationService.createLocationListener(null);
 
-        assertDeclaresMethod(listener, "onStatusChanged", String.class, int.class, Bundle.class);
-        assertDeclaresMethod(listener, "onProviderEnabled", String.class);
-        assertDeclaresMethod(listener, "onProviderDisabled", String.class);
+        listener.onStatusChanged("gps", 0, null);
+        listener.onProviderEnabled("gps");
+        listener.onProviderDisabled("gps");
     }
 
     @Test
@@ -231,11 +233,6 @@ public class BackgroundGeolocationUnitTest {
 
     private boolean isValidLongitude(double longitude) {
         return longitude >= -180.0 && longitude <= 180.0;
-    }
-
-    private void assertDeclaresMethod(LocationListener listener, String methodName, Class<?>... parameterTypes)
-        throws NoSuchMethodException {
-        assertEquals(listener.getClass(), listener.getClass().getDeclaredMethod(methodName, parameterTypes).getDeclaringClass());
     }
 
     private static class ForegroundServiceStartNotAllowedException extends RuntimeException {}
