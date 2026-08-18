@@ -1,5 +1,6 @@
 package com.capgo.capacitor_background_geolocation;
 
+import android.annotation.SuppressLint;
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.app.Service;
@@ -14,12 +15,14 @@ import android.location.LocationManager;
 import android.media.MediaPlayer;
 import android.os.Binder;
 import android.os.Build;
-import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
-import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.ServiceCompat;
+import androidx.core.location.LocationCompat;
+import androidx.core.location.LocationListenerCompat;
 import com.getcapacitor.Logger;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
@@ -31,7 +34,7 @@ import org.json.JSONObject;
 // added, and demoted when the last background watcher is removed.
 public class BackgroundGeolocationService extends Service {
 
-    static final String ACTION_BROADCAST = (BackgroundGeolocationService.class.getPackage().getName() + ".broadcast");
+    static final String NOTIFICATION_CHANNEL_ID = BackgroundGeolocationService.class.getPackage().getName();
     private final IBinder binder = new LocalBinder();
 
     private static final double EARTH_RADIUS_M = 6371000;
@@ -155,6 +158,9 @@ public class BackgroundGeolocationService extends Service {
         mediaPlayer = null;
     }
 
+    // No timeout: tracking runs for as long as the caller keeps a background watcher
+    // registered, and the lock is always released in stop() and onDestroy().
+    @SuppressLint("WakelockTimeout")
     private void acquireWakeLock() {
         if (wakeLock != null && wakeLock.isHeld()) {
             return;
@@ -237,10 +243,7 @@ public class BackgroundGeolocationService extends Service {
             }
             isOffRoute = offRoute;
         }
-        Intent intent = new Intent(ACTION_BROADCAST);
-        intent.putExtra("location", location);
-        intent.putExtra("id", callbackId);
-        LocalBroadcastManager.getInstance(getApplicationContext()).sendBroadcast(intent);
+        LocalEvents.emitLocation(callbackId, location);
     }
 
     // Delivers a location to the configured URL from native code, so it works
@@ -272,7 +275,7 @@ public class BackgroundGeolocationService extends Service {
             } else {
                 obj.put("altitudeAccuracy", JSONObject.NULL);
             }
-            obj.put("simulated", location.isFromMockProvider());
+            obj.put("simulated", LocationCompat.isMock(location));
             obj.put("speed", location.hasSpeed() ? location.getSpeed() : JSONObject.NULL);
             obj.put("bearing", location.hasBearing() ? location.getBearing() : JSONObject.NULL);
             obj.put("time", location.getTime());
@@ -285,23 +288,9 @@ public class BackgroundGeolocationService extends Service {
         return obj;
     }
 
-    // Android API < 30 requires these legacy callbacks to be implemented.
-    static LocationListener createLocationListener(final BackgroundGeolocationService service) {
-        return new LocationListener() {
-            @Override
-            public void onLocationChanged(android.location.Location location) {
-                service.handleLocationChanged(location);
-            }
-
-            @Override
-            public void onStatusChanged(String provider, int status, Bundle extras) {}
-
-            @Override
-            public void onProviderEnabled(String provider) {}
-
-            @Override
-            public void onProviderDisabled(String provider) {}
-        };
+    // Android API < 30
+    static LocationListenerCompat createLocationListener(final BackgroundGeolocationService service) {
+        return (location) -> service.handleLocationChanged(location);
     }
 
     private long locationIntervalMs() {
@@ -392,7 +381,7 @@ public class BackgroundGeolocationService extends Service {
             nativePostUrl = null;
             stopWatchdog();
             client.removeUpdates(locationCallback);
-            stopForeground(true);
+            ServiceCompat.stopForeground(BackgroundGeolocationService.this, ServiceCompat.STOP_FOREGROUND_REMOVE);
             stopSelf();
             releaseMediaPlayer();
             releaseWakeLock();
@@ -433,11 +422,11 @@ public class BackgroundGeolocationService extends Service {
     }
 
     private Notification createBackgroundNotification(String backgroundTitle, String backgroundMessage) {
-        Notification.Builder builder = new Notification.Builder(getApplicationContext())
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(getApplicationContext(), NOTIFICATION_CHANNEL_ID)
             .setContentTitle(backgroundTitle)
             .setContentText(backgroundMessage)
             .setOngoing(true)
-            .setPriority(Notification.PRIORITY_HIGH)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setWhen(System.currentTimeMillis());
 
         try {
@@ -475,15 +464,13 @@ public class BackgroundGeolocationService extends Service {
             );
         }
 
-        // Set the Channel ID for Android O.
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            builder.setChannelId(BackgroundGeolocationService.class.getPackage().getName());
-        }
-
         return builder.build();
     }
 
     // Gets the identifier of the app's resource by name, returning 0 if not found.
+    // The name comes from the host app's configuration, so it can only be resolved by
+    // reflection; the compile-time R class of this library does not contain it.
+    @SuppressLint("DiscouragedApi")
     private static int getAppResourceIdentifier(String name, String defType, Context context) {
         return context.getResources().getIdentifier(name, defType, context.getPackageName());
     }
