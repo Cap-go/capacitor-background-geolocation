@@ -50,9 +50,15 @@ final class LocalEvents {
     }
 
     private static void dispatch(Consumer<Listener> delivery) {
+        if (LISTENERS.isEmpty()) {
+            return;
+        }
+        Listener[] recipients = LISTENERS.toArray(new Listener[0]);
         MAIN_HANDLER.post(() -> {
-            for (Listener listener : LISTENERS) {
-                delivery.accept(listener);
+            for (Listener listener : recipients) {
+                if (LISTENERS.contains(listener)) {
+                    delivery.accept(listener);
+                }
             }
         });
     }
