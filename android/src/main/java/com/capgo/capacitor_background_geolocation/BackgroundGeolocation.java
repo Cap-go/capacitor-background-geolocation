@@ -4,11 +4,9 @@ import android.Manifest;
 import android.app.ForegroundServiceStartNotAllowedException;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.location.Location;
@@ -18,7 +16,8 @@ import android.os.Build;
 import android.os.IBinder;
 import android.provider.Settings;
 import androidx.core.content.ContextCompat;
-import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import androidx.core.location.LocationCompat;
+import androidx.core.location.LocationManagerCompat;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Logger;
@@ -61,8 +60,6 @@ public class BackgroundGeolocation extends Plugin {
     private ServiceConnection serviceConnection;
     private CompletableFuture<Void> locationPermissionFuture;
     private CompletableFuture<Void> geofencePermissionFuture;
-    private BroadcastReceiver serviceReceiver;
-    private BroadcastReceiver geofenceEventReceiver;
 
     private void fetchLastLocation(PluginCall call) {
         try {
@@ -640,15 +637,8 @@ public class BackgroundGeolocation extends Plugin {
 
     // Checks if device-wide location services are disabled
     private static Boolean isLocationEnabled(Context context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            LocationManager lm = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
-            return lm != null && lm.isLocationEnabled();
-        } else {
-            return (
-                Settings.Secure.getInt(context.getContentResolver(), Settings.Secure.LOCATION_MODE, Settings.Secure.LOCATION_MODE_OFF) !=
-                Settings.Secure.LOCATION_MODE_OFF
-            );
-        }
+        LocationManager lm = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
+        return lm != null && LocationManagerCompat.isLocationEnabled(lm);
     }
 
     // Capacitor's PluginCall.getLong() only reads Java Long values. JS numbers that
@@ -694,50 +684,43 @@ public class BackgroundGeolocation extends Plugin {
         // In addition to mocking locations in development, Android allows the
         // installation of apps which have the power to simulate location
         // readings in other apps.
-        obj.put("simulated", location.isFromMockProvider());
+        obj.put("simulated", LocationCompat.isMock(location));
         obj.put("speed", location.hasSpeed() ? location.getSpeed() : JSONObject.NULL);
         obj.put("bearing", location.hasBearing() ? location.getBearing() : JSONObject.NULL);
         obj.put("time", location.getTime());
         return obj;
     }
 
-    // Receives messages from the service.
-    private class ServiceReceiver extends BroadcastReceiver {
-
+    // Receives messages from the service and the geofence broadcast receiver.
+    private final LocalEvents.Listener localEventListener = new LocalEvents.Listener() {
         @Override
-        public void onReceive(Context context, Intent intent) {
-            String id = intent.getStringExtra("id");
-            PluginCall call = getBridge().getSavedCall(id);
+        public void onLocation(String callbackId, Location location) {
+            PluginCall call = getBridge().getSavedCall(callbackId);
             if (call == null) {
                 return;
             }
-            Location location = intent.getParcelableExtra("location");
-            if (location != null) {
-                call.resolve(formatLocation(location));
-            } else {
-                Logger.debug("No locations received");
-            }
+            call.resolve(formatLocation(location));
         }
-    }
-
-    private class GeofenceEventReceiver extends BroadcastReceiver {
 
         @Override
-        public void onReceive(Context context, Intent intent) {
-            boolean errorEvent = GeofenceStore.ACTION_GEOFENCE_ERROR.equals(intent.getAction());
-            String payload = intent.getStringExtra(errorEvent ? GeofenceStore.EXTRA_GEOFENCE_ERROR : GeofenceStore.EXTRA_GEOFENCE_PAYLOAD);
-            if (payload == null || payload.isEmpty()) {
-                return;
-            }
-            try {
-                notifyListeners(
-                    errorEvent ? "geofenceError" : "geofenceTransition",
-                    GeofenceStore.toJSObject(new JSONObject(payload)),
-                    true
-                );
-            } catch (JSONException exception) {
-                Logger.error("Could not parse geofence payload", exception);
-            }
+        public void onGeofenceTransition(String payload) {
+            notifyGeofenceListeners("geofenceTransition", payload);
+        }
+
+        @Override
+        public void onGeofenceError(String payload) {
+            notifyGeofenceListeners("geofenceError", payload);
+        }
+    };
+
+    private void notifyGeofenceListeners(String eventName, String payload) {
+        if (payload == null || payload.isEmpty()) {
+            return;
+        }
+        try {
+            notifyListeners(eventName, GeofenceStore.toJSObject(new JSONObject(payload)), true);
+        } catch (JSONException exception) {
+            Logger.error("Could not parse geofence payload", exception);
         }
     }
 
@@ -749,7 +732,7 @@ public class BackgroundGeolocation extends Plugin {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationManager manager = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
             NotificationChannel channel = new NotificationChannel(
-                BackgroundGeolocationService.class.getPackage().getName(),
+                BackgroundGeolocationService.NOTIFICATION_CHANNEL_ID,
                 BackgroundGeolocationService.getAppString(
                     "capacitor_background_geolocation_notification_channel_name",
                     "Background Tracking",
@@ -763,16 +746,7 @@ public class BackgroundGeolocation extends Plugin {
             manager.createNotificationChannel(channel);
         }
 
-        serviceReceiver = new ServiceReceiver();
-        LocalBroadcastManager.getInstance(this.getContext()).registerReceiver(
-            serviceReceiver,
-            new IntentFilter(BackgroundGeolocationService.ACTION_BROADCAST)
-        );
-
-        geofenceEventReceiver = new GeofenceEventReceiver();
-        IntentFilter geofenceFilter = new IntentFilter(GeofenceStore.ACTION_GEOFENCE_EVENT);
-        geofenceFilter.addAction(GeofenceStore.ACTION_GEOFENCE_ERROR);
-        LocalBroadcastManager.getInstance(this.getContext()).registerReceiver(geofenceEventReceiver, geofenceFilter);
+        LocalEvents.addListener(localEventListener);
     }
 
     private CompletableFuture<BackgroundGeolocationService.LocalBinder> getServiceConnection() {
@@ -906,14 +880,7 @@ public class BackgroundGeolocation extends Plugin {
         if (geofencePermissionFuture != null && !geofencePermissionFuture.isDone()) {
             geofencePermissionFuture.cancel(true);
         }
-        if (serviceReceiver != null) {
-            LocalBroadcastManager.getInstance(this.getContext()).unregisterReceiver(serviceReceiver);
-            serviceReceiver = null;
-        }
-        if (geofenceEventReceiver != null) {
-            LocalBroadcastManager.getInstance(this.getContext()).unregisterReceiver(geofenceEventReceiver);
-            geofenceEventReceiver = null;
-        }
+        LocalEvents.removeListener(localEventListener);
         super.handleOnDestroy();
     }
 
