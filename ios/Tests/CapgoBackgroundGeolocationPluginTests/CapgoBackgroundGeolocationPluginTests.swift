@@ -44,6 +44,7 @@ class CapgoBackgroundGeolocationTests: XCTestCase {
         XCTAssertTrue(methodNames.contains("removeGeofence"))
         XCTAssertTrue(methodNames.contains("removeAllGeofences"))
         XCTAssertTrue(methodNames.contains("getMonitoredGeofences"))
+        XCTAssertTrue(methodNames.contains("updateHeaders"))
         XCTAssertTrue(methodNames.contains("getPluginVersion"))
     }
 
