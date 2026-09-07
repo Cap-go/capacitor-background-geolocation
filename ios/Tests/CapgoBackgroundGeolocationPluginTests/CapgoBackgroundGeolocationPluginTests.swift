@@ -40,6 +40,7 @@ class CapgoBackgroundGeolocationTests: XCTestCase {
         XCTAssertTrue(methodNames.contains("openSettings"))
         XCTAssertTrue(methodNames.contains("setPlannedRoute"))
         XCTAssertTrue(methodNames.contains("setupGeofencing"))
+        XCTAssertTrue(methodNames.contains("updateHeaders"))
         XCTAssertTrue(methodNames.contains("addGeofence"))
         XCTAssertTrue(methodNames.contains("removeGeofence"))
         XCTAssertTrue(methodNames.contains("removeAllGeofences"))

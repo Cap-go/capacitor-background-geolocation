@@ -38,7 +38,7 @@ func formatLocation(_ location: CLLocation) -> PluginCallResultData {
 @objc(BackgroundGeolocation)
 // swiftlint:disable:next type_body_length
 public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBridgedPlugin {
-    private let pluginVersion: String = "8.4.3"
+    private let pluginVersion: String = "8.4.4"
     public let identifier = "BackgroundGeolocationPlugin"
     public let jsName = "BackgroundGeolocation"
     public let pluginMethods: [CAPPluginMethod] = [
@@ -47,6 +47,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         CAPPluginMethod(name: "openSettings", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setPlannedRoute", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setupGeofencing", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "updateHeaders", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "addGeofence", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "removeGeofence", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "removeAllGeofences", returnType: CAPPluginReturnPromise),
