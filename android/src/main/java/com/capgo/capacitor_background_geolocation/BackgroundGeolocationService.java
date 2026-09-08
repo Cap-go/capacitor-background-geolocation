@@ -418,6 +418,9 @@ public class BackgroundGeolocationService extends Service {
             }
             locationCallback = createLocationListener(BackgroundGeolocationService.this);
             requestLocationUpdates();
+            // Arm the watchdog here so rejected network fixes during the grace period cannot
+            // leave tracking without a restart path if GPS_PROVIDER goes silent.
+            startWatchdog();
             promoteToForeground(notificationTitle, notificationMessage);
         }
 
