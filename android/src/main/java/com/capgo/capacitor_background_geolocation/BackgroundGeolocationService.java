@@ -139,6 +139,7 @@ public class BackgroundGeolocationService extends Service {
             currentMinIntervalMs = LocationStore.getMinIntervalMs(context);
             networkFallbackEnabled = LocationStore.getNetworkFallback(context);
             locationCallback = createLocationListener(this);
+            lastGpsFixAtMs = SystemClock.elapsedRealtime();
             requestLocationUpdates();
             startWatchdog();
         }
@@ -247,8 +248,7 @@ public class BackgroundGeolocationService extends Service {
         if (LocationManager.GPS_PROVIDER.equals(location.getProvider())) {
             lastGpsFixAtMs = SystemClock.elapsedRealtime();
         } else if (LocationManager.NETWORK_PROVIDER.equals(location.getProvider())) {
-            boolean gpsStillFresh =
-                lastGpsFixAtMs != 0 && (SystemClock.elapsedRealtime() - lastGpsFixAtMs) < NETWORK_FALLBACK_GRACE_MS;
+            boolean gpsStillFresh = lastGpsFixAtMs != 0 && (SystemClock.elapsedRealtime() - lastGpsFixAtMs) < NETWORK_FALLBACK_GRACE_MS;
             boolean tooImprecise = !location.hasAccuracy() || location.getAccuracy() > NETWORK_FIX_MAX_ACCURACY_M;
             if (gpsStillFresh || tooImprecise) {
                 // Drop it - and skip startWatchdog() below so a run of rejected fixes can't mask a
@@ -340,7 +340,12 @@ public class BackgroundGeolocationService extends Service {
         // with network location turned off.
         try {
             if (client.isProviderEnabled(LocationManager.NETWORK_PROVIDER)) {
-                client.requestLocationUpdates(LocationManager.NETWORK_PROVIDER, locationIntervalMs(), currentDistanceFilter, locationCallback);
+                client.requestLocationUpdates(
+                    LocationManager.NETWORK_PROVIDER,
+                    locationIntervalMs(),
+                    currentDistanceFilter,
+                    locationCallback
+                );
             }
         } catch (SecurityException ignore) {
             // Same rationale as the GPS_PROVIDER catch above.
@@ -388,7 +393,7 @@ public class BackgroundGeolocationService extends Service {
             releaseMediaPlayer();
             acquireWakeLock();
             client = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-            lastGpsFixAtMs = 0L;
+            lastGpsFixAtMs = SystemClock.elapsedRealtime();
             callbackId = id;
             currentDistanceFilter = distanceFilter;
             currentMinIntervalMs = Math.max(0L, minIntervalMs);
