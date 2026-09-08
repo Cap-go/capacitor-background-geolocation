@@ -139,6 +139,7 @@ public class BackgroundGeolocationService extends Service {
             currentMinIntervalMs = LocationStore.getMinIntervalMs(context);
             networkFallbackEnabled = LocationStore.getNetworkFallback(context);
             locationCallback = createLocationListener(this);
+            lastGpsFixAtMs = SystemClock.elapsedRealtime();
             requestLocationUpdates();
             startWatchdog();
         }
@@ -392,7 +393,7 @@ public class BackgroundGeolocationService extends Service {
             releaseMediaPlayer();
             acquireWakeLock();
             client = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
-            lastGpsFixAtMs = 0L;
+            lastGpsFixAtMs = SystemClock.elapsedRealtime();
             callbackId = id;
             currentDistanceFilter = distanceFilter;
             currentMinIntervalMs = Math.max(0L, minIntervalMs);
