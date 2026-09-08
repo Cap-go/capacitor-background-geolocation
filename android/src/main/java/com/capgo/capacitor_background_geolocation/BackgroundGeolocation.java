@@ -1,13 +1,12 @@
 package com.capgo.capacitor_background_geolocation;
 
 import android.Manifest;
+import android.app.ForegroundServiceStartNotAllowedException;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.location.Location;
@@ -17,7 +16,8 @@ import android.os.Build;
 import android.os.IBinder;
 import android.provider.Settings;
 import androidx.core.content.ContextCompat;
-import androidx.localbroadcastmanager.content.LocalBroadcastManager;
+import androidx.core.location.LocationCompat;
+import androidx.core.location.LocationManagerCompat;
 import com.getcapacitor.JSArray;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Logger;
@@ -57,10 +57,9 @@ public class BackgroundGeolocation extends Plugin {
     private final String pluginVersion = "";
 
     private CompletableFuture<BackgroundGeolocationService.LocalBinder> serviceConnectionFuture;
+    private ServiceConnection serviceConnection;
     private CompletableFuture<Void> locationPermissionFuture;
     private CompletableFuture<Void> geofencePermissionFuture;
-    private BroadcastReceiver serviceReceiver;
-    private BroadcastReceiver geofenceEventReceiver;
 
     private void fetchLastLocation(PluginCall call) {
         try {
@@ -114,18 +113,29 @@ public class BackgroundGeolocation extends Plugin {
         if (call.getBoolean("stale", false)) {
             fetchLastLocation(call);
         }
-        getServiceConnection().thenAccept((serviceBinder) -> {
-            serviceBinder.start(
-                call.getCallbackId(),
-                call.getString("backgroundTitle", "Using your location"),
-                call.getString("backgroundMessage", ""),
-                call.getFloat("distanceFilter", 0f),
-                call.getString("url", null),
-                headersFromCall(call),
-                call.getLong("minIntervalMs", 0L),
-                call.getBoolean("networkFallback", false)
-            );
-        });
+        CompletableFuture<BackgroundGeolocationService.LocalBinder> connectionFuture = getServiceConnection();
+        connectionFuture
+            .thenAccept((serviceBinder) -> {
+                serviceBinder.start(
+                    call.getCallbackId(),
+                    call.getString("backgroundTitle", "Using your location"),
+                    call.getString("backgroundMessage", ""),
+                    call.getFloat("distanceFilter", 0f),
+                    call.getString("url", null),
+                    headersFromCall(call),
+                    longOptionFromCall(call, "minIntervalMs", 0L),
+                    call.getBoolean("networkFallback", false)
+                );
+            })
+            .exceptionally((throwable) -> {
+                if (serviceConnectionFuture == connectionFuture) {
+                    releaseServiceConnection();
+                    stopBackgroundService();
+                    serviceConnectionFuture = null;
+                }
+                rejectServiceStartFailure(call, throwable);
+                return null;
+            });
     }
 
     @PluginMethod
@@ -628,15 +638,14 @@ public class BackgroundGeolocation extends Plugin {
 
     // Checks if device-wide location services are disabled
     private static Boolean isLocationEnabled(Context context) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-            LocationManager lm = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
-            return lm != null && lm.isLocationEnabled();
-        } else {
-            return (
-                Settings.Secure.getInt(context.getContentResolver(), Settings.Secure.LOCATION_MODE, Settings.Secure.LOCATION_MODE_OFF) !=
-                Settings.Secure.LOCATION_MODE_OFF
-            );
-        }
+        LocationManager lm = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
+        return lm != null && LocationManagerCompat.isLocationEnabled(lm);
+    }
+
+    // Capacitor's PluginCall.getLong() only reads Java Long values. JS numbers that
+    // fit in 32 bits cross the bridge as Integer, so optLong is required (issue #62).
+    static long longOptionFromCall(PluginCall call, String key, long defaultValue) {
+        return call.getData().optLong(key, defaultValue);
     }
 
     private static Map<String, String> headersFromCall(PluginCall call) {
@@ -676,50 +685,43 @@ public class BackgroundGeolocation extends Plugin {
         // In addition to mocking locations in development, Android allows the
         // installation of apps which have the power to simulate location
         // readings in other apps.
-        obj.put("simulated", location.isFromMockProvider());
+        obj.put("simulated", LocationCompat.isMock(location));
         obj.put("speed", location.hasSpeed() ? location.getSpeed() : JSONObject.NULL);
         obj.put("bearing", location.hasBearing() ? location.getBearing() : JSONObject.NULL);
         obj.put("time", location.getTime());
         return obj;
     }
 
-    // Receives messages from the service.
-    private class ServiceReceiver extends BroadcastReceiver {
-
+    // Receives messages from the service and the geofence broadcast receiver.
+    private final LocalEvents.Listener localEventListener = new LocalEvents.Listener() {
         @Override
-        public void onReceive(Context context, Intent intent) {
-            String id = intent.getStringExtra("id");
-            PluginCall call = getBridge().getSavedCall(id);
+        public void onLocation(String callbackId, Location location) {
+            PluginCall call = getBridge().getSavedCall(callbackId);
             if (call == null) {
                 return;
             }
-            Location location = intent.getParcelableExtra("location");
-            if (location != null) {
-                call.resolve(formatLocation(location));
-            } else {
-                Logger.debug("No locations received");
-            }
+            call.resolve(formatLocation(location));
         }
-    }
-
-    private class GeofenceEventReceiver extends BroadcastReceiver {
 
         @Override
-        public void onReceive(Context context, Intent intent) {
-            boolean errorEvent = GeofenceStore.ACTION_GEOFENCE_ERROR.equals(intent.getAction());
-            String payload = intent.getStringExtra(errorEvent ? GeofenceStore.EXTRA_GEOFENCE_ERROR : GeofenceStore.EXTRA_GEOFENCE_PAYLOAD);
-            if (payload == null || payload.isEmpty()) {
-                return;
-            }
-            try {
-                notifyListeners(
-                    errorEvent ? "geofenceError" : "geofenceTransition",
-                    GeofenceStore.toJSObject(new JSONObject(payload)),
-                    true
-                );
-            } catch (JSONException exception) {
-                Logger.error("Could not parse geofence payload", exception);
-            }
+        public void onGeofenceTransition(String payload) {
+            notifyGeofenceListeners("geofenceTransition", payload);
+        }
+
+        @Override
+        public void onGeofenceError(String payload) {
+            notifyGeofenceListeners("geofenceError", payload);
+        }
+    };
+
+    private void notifyGeofenceListeners(String eventName, String payload) {
+        if (payload == null || payload.isEmpty()) {
+            return;
+        }
+        try {
+            notifyListeners(eventName, GeofenceStore.toJSObject(new JSONObject(payload)), true);
+        } catch (JSONException exception) {
+            Logger.error("Could not parse geofence payload", exception);
         }
     }
 
@@ -731,7 +733,7 @@ public class BackgroundGeolocation extends Plugin {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationManager manager = (NotificationManager) getContext().getSystemService(Context.NOTIFICATION_SERVICE);
             NotificationChannel channel = new NotificationChannel(
-                BackgroundGeolocationService.class.getPackage().getName(),
+                BackgroundGeolocationService.NOTIFICATION_CHANNEL_ID,
                 BackgroundGeolocationService.getAppString(
                     "capacitor_background_geolocation_notification_channel_name",
                     "Background Tracking",
@@ -745,16 +747,7 @@ public class BackgroundGeolocation extends Plugin {
             manager.createNotificationChannel(channel);
         }
 
-        serviceReceiver = new ServiceReceiver();
-        LocalBroadcastManager.getInstance(this.getContext()).registerReceiver(
-            serviceReceiver,
-            new IntentFilter(BackgroundGeolocationService.ACTION_BROADCAST)
-        );
-
-        geofenceEventReceiver = new GeofenceEventReceiver();
-        IntentFilter geofenceFilter = new IntentFilter(GeofenceStore.ACTION_GEOFENCE_EVENT);
-        geofenceFilter.addAction(GeofenceStore.ACTION_GEOFENCE_ERROR);
-        LocalBroadcastManager.getInstance(this.getContext()).registerReceiver(geofenceEventReceiver, geofenceFilter);
+        LocalEvents.addListener(localEventListener);
     }
 
     private CompletableFuture<BackgroundGeolocationService.LocalBinder> getServiceConnection() {
@@ -762,32 +755,116 @@ public class BackgroundGeolocation extends Plugin {
             return serviceConnectionFuture;
         }
 
-        serviceConnectionFuture = new CompletableFuture<>();
+        CompletableFuture<BackgroundGeolocationService.LocalBinder> connectionFuture = new CompletableFuture<>();
+        serviceConnectionFuture = connectionFuture;
 
-        Intent serviceIntent = new Intent(this.getContext(), BackgroundGeolocationService.class);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            this.getContext().startForegroundService(serviceIntent);
-        } else {
-            this.getContext().startService(serviceIntent);
+        Intent serviceIntent = createServiceIntent();
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                this.getContext().startForegroundService(serviceIntent);
+            } else {
+                this.getContext().startService(serviceIntent);
+            }
+        } catch (RuntimeException exception) {
+            connectionFuture.completeExceptionally(exception);
+            serviceConnectionFuture = null;
+            return connectionFuture;
         }
 
-        this.getContext().bindService(
-            serviceIntent,
-            new ServiceConnection() {
-                @Override
-                public void onServiceConnected(ComponentName name, IBinder binder) {
-                    serviceConnectionFuture.complete((BackgroundGeolocationService.LocalBinder) binder);
-                }
+        ServiceConnection connection = new ServiceConnection() {
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder binder) {
+                connectionFuture.complete((BackgroundGeolocationService.LocalBinder) binder);
+            }
 
-                @Override
-                public void onServiceDisconnected(ComponentName name) {
+            @Override
+            public void onServiceDisconnected(ComponentName name) {
+                if (serviceConnectionFuture == connectionFuture) {
+                    serviceConnection = null;
                     serviceConnectionFuture = null;
                 }
-            },
-            Context.BIND_AUTO_CREATE
-        );
+            }
+        };
+        serviceConnection = connection;
 
-        return serviceConnectionFuture;
+        try {
+            boolean bound = this.getContext().bindService(serviceIntent, connection, Context.BIND_AUTO_CREATE);
+            if (!bound) {
+                serviceConnection = null;
+                IllegalStateException exception = new IllegalStateException("Failed to bind to background location service");
+                connectionFuture.completeExceptionally(exception);
+                stopBackgroundService();
+                serviceConnectionFuture = null;
+            }
+        } catch (SecurityException exception) {
+            serviceConnection = null;
+            connectionFuture.completeExceptionally(exception);
+            stopBackgroundService();
+            serviceConnectionFuture = null;
+        }
+
+        return connectionFuture;
+    }
+
+    private Intent createServiceIntent() {
+        return new Intent(this.getContext(), BackgroundGeolocationService.class);
+    }
+
+    private void stopBackgroundService() {
+        getContext().stopService(createServiceIntent());
+    }
+
+    private void releaseServiceConnection() {
+        if (serviceConnection == null) {
+            return;
+        }
+        try {
+            getContext().unbindService(serviceConnection);
+        } catch (IllegalArgumentException ignored) {
+            // Service was not bound or already unbound.
+        }
+        serviceConnection = null;
+    }
+
+    private void rejectServiceStartFailure(PluginCall call, Throwable throwable) {
+        Throwable cause = unwrapThrowable(throwable);
+        if (isForegroundServiceStartNotAllowed(cause)) {
+            call.reject(
+                "Cannot start background location while the app is in the background. Bring the app to the foreground and call start() again.",
+                "FOREGROUND_SERVICE_START_NOT_ALLOWED",
+                toException(cause)
+            );
+            return;
+        }
+        call.reject("Failed to start background location service: " + cause.getMessage(), toException(cause));
+    }
+
+    private static Exception toException(Throwable throwable) {
+        if (throwable instanceof Exception) {
+            return (Exception) throwable;
+        }
+        return new Exception(throwable);
+    }
+
+    static boolean isForegroundServiceStartNotAllowed(Throwable throwable) {
+        while (throwable != null) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && throwable instanceof ForegroundServiceStartNotAllowedException) {
+                return true;
+            }
+            String className = throwable.getClass().getName();
+            if (className.endsWith("ForegroundServiceStartNotAllowedException") || className.endsWith("ServiceStartNotAllowedException")) {
+                return true;
+            }
+            throwable = throwable.getCause();
+        }
+        return false;
+    }
+
+    private static Throwable unwrapThrowable(Throwable throwable) {
+        if (throwable instanceof java.util.concurrent.CompletionException && throwable.getCause() != null) {
+            return throwable.getCause();
+        }
+        return throwable;
     }
 
     @Override
@@ -804,14 +881,7 @@ public class BackgroundGeolocation extends Plugin {
         if (geofencePermissionFuture != null && !geofencePermissionFuture.isDone()) {
             geofencePermissionFuture.cancel(true);
         }
-        if (serviceReceiver != null) {
-            LocalBroadcastManager.getInstance(this.getContext()).unregisterReceiver(serviceReceiver);
-            serviceReceiver = null;
-        }
-        if (geofenceEventReceiver != null) {
-            LocalBroadcastManager.getInstance(this.getContext()).unregisterReceiver(geofenceEventReceiver);
-            geofenceEventReceiver = null;
-        }
+        LocalEvents.removeListener(localEventListener);
         super.handleOnDestroy();
     }
 

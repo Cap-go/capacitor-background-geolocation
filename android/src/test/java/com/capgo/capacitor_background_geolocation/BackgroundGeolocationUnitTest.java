@@ -4,11 +4,13 @@ import static org.junit.Assert.*;
 
 import android.content.Intent;
 import android.location.Location;
-import android.location.LocationListener;
-import android.os.Bundle;
+import androidx.core.location.LocationListenerCompat;
+import com.getcapacitor.JSObject;
 import com.getcapacitor.PermissionState;
+import com.getcapacitor.PluginCall;
 import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofenceStatusCodes;
+import org.json.JSONException;
 import org.junit.Test;
 
 /**
@@ -52,12 +54,9 @@ public class BackgroundGeolocationUnitTest {
     }
 
     @Test
-    public void testLocationListenerImplementsLegacyCallbacks() throws Exception {
-        LocationListener listener = BackgroundGeolocationService.createLocationListener(null);
-
-        assertDeclaresMethod(listener, "onStatusChanged", String.class, int.class, Bundle.class);
-        assertDeclaresMethod(listener, "onProviderEnabled", String.class);
-        assertDeclaresMethod(listener, "onProviderDisabled", String.class);
+    public void testCreateLocationListenerReturnsCompatListener() {
+        LocationListenerCompat listener = BackgroundGeolocationService.createLocationListener(null);
+        assertNotNull("Location listener should be created", listener);
     }
 
     @Test
@@ -105,6 +104,51 @@ public class BackgroundGeolocationUnitTest {
         );
         assertEquals(Geofence.GEOFENCE_TRANSITION_ENTER, GeofenceStore.geofenceTransitionTypes(true, false));
         assertEquals(Geofence.GEOFENCE_TRANSITION_EXIT, GeofenceStore.geofenceTransitionTypes(false, true));
+    }
+
+    @Test
+    public void testLongOptionFromCallCoercesIntegerBridgeValue() throws JSONException {
+        JSObject data = new JSObject();
+        data.put("minIntervalMs", 295_000);
+
+        PluginCall call = new PluginCall(null, "BackgroundGeolocation", "test-callback", "start", data);
+
+        assertEquals(
+            "JS numbers within Integer range must be read as minIntervalMs",
+            295_000L,
+            BackgroundGeolocation.longOptionFromCall(call, "minIntervalMs", 0L)
+        );
+        assertEquals("PluginCall.getLong misses Integer bridge values (issue #62)", Long.valueOf(0L), call.getLong("minIntervalMs", 0L));
+    }
+
+    @Test
+    public void testLongOptionFromCallUsesDefaultWhenMissing() {
+        PluginCall call = new PluginCall(null, "BackgroundGeolocation", "test-callback", "start", new JSObject());
+
+        assertEquals(0L, BackgroundGeolocation.longOptionFromCall(call, "minIntervalMs", 0L));
+        assertEquals(60_000L, BackgroundGeolocation.longOptionFromCall(call, "minIntervalMs", 60_000L));
+    }
+
+    @Test
+    public void testForegroundServiceStartNotAllowedDetection() {
+        assertTrue(
+            "ForegroundServiceStartNotAllowedException class name should be detected",
+            BackgroundGeolocation.isForegroundServiceStartNotAllowed(new ForegroundServiceStartNotAllowedException())
+        );
+        assertTrue(
+            "ServiceStartNotAllowedException class name should be detected",
+            BackgroundGeolocation.isForegroundServiceStartNotAllowed(new ServiceStartNotAllowedException())
+        );
+        assertTrue(
+            "Wrapped foreground service start failures should be detected",
+            BackgroundGeolocation.isForegroundServiceStartNotAllowed(
+                new RuntimeException("wrapped", new ForegroundServiceStartNotAllowedException())
+            )
+        );
+        assertFalse(
+            "Unrelated exceptions should not be treated as FGS start failures",
+            BackgroundGeolocation.isForegroundServiceStartNotAllowed(new IllegalStateException("other failure"))
+        );
     }
 
     @Test
@@ -185,8 +229,7 @@ public class BackgroundGeolocationUnitTest {
         return longitude >= -180.0 && longitude <= 180.0;
     }
 
-    private void assertDeclaresMethod(LocationListener listener, String methodName, Class<?>... parameterTypes)
-        throws NoSuchMethodException {
-        assertEquals(listener.getClass(), listener.getClass().getDeclaredMethod(methodName, parameterTypes).getDeclaringClass());
-    }
+    private static class ForegroundServiceStartNotAllowedException extends RuntimeException {}
+
+    private static class ServiceStartNotAllowedException extends RuntimeException {}
 }
