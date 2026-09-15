@@ -60,6 +60,7 @@ public class BackgroundGeolocation extends Plugin {
     private ServiceConnection serviceConnection;
     private CompletableFuture<Void> locationPermissionFuture;
     private CompletableFuture<Void> geofencePermissionFuture;
+    private PluginCall watchCall;
 
     private void fetchLastLocation(PluginCall call) {
         try {
@@ -87,6 +88,7 @@ public class BackgroundGeolocation extends Plugin {
 
         if (getPermissionState("location") != PermissionState.GRANTED && call.getBoolean("requestPermissions", true)) {
             call.setKeepAlive(true);
+            watchCall = call;
             requestLocationPermissions(call)
                 .thenRun(() -> {
                     proceedWithStart(call);
@@ -106,6 +108,7 @@ public class BackgroundGeolocation extends Plugin {
 
         // Everything is OK, continuing to adding a watcher
         call.setKeepAlive(true);
+        watchCall = call;
         proceedWithStart(call);
     }
 
@@ -316,10 +319,11 @@ public class BackgroundGeolocation extends Plugin {
         }
         getServiceConnection()
             .thenAccept((service) -> {
-                var callbackId = service.stop();
-                PluginCall savedCall = getBridge().getSavedCall(callbackId);
+                service.stop();
+                PluginCall savedCall = watchCall;
+                watchCall = null;
                 if (savedCall != null) {
-                    savedCall.release(getBridge());
+                    savedCall.setKeepAlive(false);
                 }
                 call.resolve();
                 serviceConnectionFuture = null;
@@ -696,7 +700,7 @@ public class BackgroundGeolocation extends Plugin {
     private final LocalEvents.Listener localEventListener = new LocalEvents.Listener() {
         @Override
         public void onLocation(String callbackId, Location location) {
-            PluginCall call = getBridge().getSavedCall(callbackId);
+            PluginCall call = watchCall;
             if (call == null) {
                 return;
             }

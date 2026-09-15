@@ -207,7 +207,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
 
             if let callbackId = self.activeCallbackId {
                 if let savedCall = self.bridge?.savedCall(withID: callbackId) {
-                    self.bridge?.releaseCall(savedCall)
+                    savedCall.keepAlive = false
                 }
                 self.activeCallbackId = nil
             }
