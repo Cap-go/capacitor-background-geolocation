@@ -11,11 +11,11 @@ let package = Package(
             targets: ["CapApp-SPM"])
     ],
     dependencies: [
-        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.3.1"),
+        .package(url: "https://github.com/ionic-team/capacitor-swift-pm.git", exact: "8.5.2"),
         .package(name: "CapgoBackgroundGeolocation", path: "../../../node_modules/.bun/@capgo+background-geolocation@file+../node_modules/@capgo/background-geolocation"),
-        .package(name: "CapacitorLocalNotifications", path: "../../../node_modules/.bun/@capacitor+local-notifications@7.0.6+2a604cb248d57ff2/node_modules/@capacitor/local-notifications"),
-        .package(name: "CapgoCapacitorUpdater", path: "../../../node_modules/.bun/@capgo+capacitor-updater@8.47.10+2a604cb248d57ff2/node_modules/@capgo/capacitor-updater"),
-        .package(name: "CapacitorSplashScreen", path: "../../../node_modules/.bun/@capacitor+splash-screen@8.0.1+2a604cb248d57ff2/node_modules/@capacitor/splash-screen")
+        .package(name: "CapacitorLocalNotifications", path: "../../../node_modules/.bun/@capacitor+local-notifications@8.3.1+8c735c3c6e2ff3c1/node_modules/@capacitor/local-notifications"),
+        .package(name: "CapgoCapacitorUpdater", path: "../../../node_modules/.bun/@capgo+capacitor-updater@8.47.10+8c735c3c6e2ff3c1/node_modules/@capgo/capacitor-updater"),
+        .package(name: "CapacitorSplashScreen", path: "../../../node_modules/.bun/@capacitor+splash-screen@8.0.1+8c735c3c6e2ff3c1/node_modules/@capacitor/splash-screen")
     ],
     targets: [
         .target(
