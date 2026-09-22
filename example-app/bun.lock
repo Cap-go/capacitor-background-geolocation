@@ -8,7 +8,7 @@
         "@capacitor/android": "^8.5.2",
         "@capacitor/core": "^8.5.2",
         "@capacitor/ios": "^8.5.2",
-        "@capacitor/local-notifications": "7.0.7",
+        "@capacitor/local-notifications": "^8.0.0",
         "@capacitor/splash-screen": "^8.0.0",
         "@capgo/background-geolocation": "file:..",
         "@capgo/capacitor-updater": "^8.45.11",
@@ -35,7 +35,7 @@
 
     "@capacitor/ios": ["@capacitor/ios@8.5.2", "", { "peerDependencies": { "@capacitor/core": "^8.5.0" } }, "sha512-eOT2S67AfTFG7KN0T3oxwAajrJz4rSye+ODfvChiwrk0F/+kWufFM1qU6cDjGJUOfwdAoeuEpZyWHSwZlu4GFg=="],
 
-    "@capacitor/local-notifications": ["@capacitor/local-notifications@7.0.7", "", { "peerDependencies": { "@capacitor/core": ">=7.0.0" } }, "sha512-3qSpa8PpVMONHqBOaJ4RbA/lB5vOdEngtep0myGmP3S56gShPScDCotbw7dwmQy3NCdY4Up9nH3ySrGvUh2jZg=="],
+    "@capacitor/local-notifications": ["@capacitor/local-notifications@8.3.1", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, "sha512-F7zu/+p/mIR958YP4axOkeI5hBKRaXDyYjbNPrAil2wWfd7OxScPSTvP9t85NpQ0eULVRu0/sntoxOg6ck477A=="],
 
     "@capacitor/splash-screen": ["@capacitor/splash-screen@8.0.1", "", { "peerDependencies": { "@capacitor/core": ">=8.0.0" } }, "sha512-c/ew/Z3eA7z8l06WoRAtzVF16VwYYrExmHmfGq1Cg675pVzaC/yuucB8/1xG1vhEfnW4fZ1KhSf/kzR1RiVYgg=="],
 
