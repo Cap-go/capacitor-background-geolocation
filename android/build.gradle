@@ -19,6 +19,10 @@ buildscript {
 
 apply plugin: 'com.android.library'
 
+// The plugin version is read from package.json at build time so the value
+// returned by getPluginVersion() can never drift from the published package.
+def pluginVersion = new groovy.json.JsonSlurper().parse(file('../package.json')).version
+
 android {
     namespace = "com.capgo.capacitor_background_geolocation"
     compileSdk = project.hasProperty('compileSdkVersion') ? rootProject.ext.compileSdkVersion : 36
@@ -28,6 +32,10 @@ android {
         versionCode 1
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField "String", "PLUGIN_VERSION", "\"${pluginVersion}\""
+    }
+    buildFeatures {
+        buildConfig = true
     }
     buildTypes {
         release {
