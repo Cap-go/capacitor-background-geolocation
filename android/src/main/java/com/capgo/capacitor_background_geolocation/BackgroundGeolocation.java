@@ -57,6 +57,9 @@ public class BackgroundGeolocation extends Plugin {
     private final String pluginVersion = "";
 
     private CompletableFuture<BackgroundGeolocationService.LocalBinder> serviceConnectionFuture;
+    // Completes once `serviceBinder.start(...)` has actually run, so `stop()` can
+    // wait for it instead of racing it on the raw service binding.
+    private CompletableFuture<Void> serviceStartedFuture;
     private ServiceConnection serviceConnection;
     private CompletableFuture<Void> locationPermissionFuture;
     private CompletableFuture<Void> geofencePermissionFuture;
@@ -117,28 +120,27 @@ public class BackgroundGeolocation extends Plugin {
             fetchLastLocation(call);
         }
         CompletableFuture<BackgroundGeolocationService.LocalBinder> connectionFuture = getServiceConnection();
-        connectionFuture
-            .thenAccept((serviceBinder) -> {
-                serviceBinder.start(
-                    call.getCallbackId(),
-                    call.getString("backgroundTitle", "Using your location"),
-                    call.getString("backgroundMessage", ""),
-                    call.getFloat("distanceFilter", 0f),
-                    call.getString("url", null),
-                    headersFromCall(call),
-                    longOptionFromCall(call, "minIntervalMs", 0L),
-                    call.getBoolean("networkFallback", false)
-                );
-            })
-            .exceptionally((throwable) -> {
-                if (serviceConnectionFuture == connectionFuture) {
-                    releaseServiceConnection();
-                    stopBackgroundService();
-                    serviceConnectionFuture = null;
-                }
-                rejectServiceStartFailure(call, throwable);
-                return null;
-            });
+        serviceStartedFuture = connectionFuture.thenAccept((serviceBinder) -> {
+            serviceBinder.start(
+                call.getCallbackId(),
+                call.getString("backgroundTitle", "Using your location"),
+                call.getString("backgroundMessage", ""),
+                call.getFloat("distanceFilter", 0f),
+                call.getString("url", null),
+                headersFromCall(call),
+                longOptionFromCall(call, "minIntervalMs", 0L),
+                call.getBoolean("networkFallback", false)
+            );
+        });
+        serviceStartedFuture.exceptionally((throwable) -> {
+            if (serviceConnectionFuture == connectionFuture) {
+                releaseServiceConnection();
+                stopBackgroundService();
+                serviceConnectionFuture = null;
+            }
+            rejectServiceStartFailure(call, throwable);
+            return null;
+        });
     }
 
     @PluginMethod
@@ -317,7 +319,16 @@ public class BackgroundGeolocation extends Plugin {
             call.resolve();
             return;
         }
-        getServiceConnection()
+        // Wait for an in-flight start() to reach the service before stopping it.
+        // Without this, a start() immediately followed by stop() can deliver the
+        // stop to the service before the start (CompletableFuture runs dependents
+        // in LIFO order), leaving tracking running after stop() resolved.
+        CompletableFuture<Void> started = serviceStartedFuture;
+        CompletableFuture<BackgroundGeolocationService.LocalBinder> ready =
+            started == null
+                ? getServiceConnection()
+                : started.exceptionally((ignored) -> null).thenCompose((ignored) -> getServiceConnection());
+        ready
             .thenAccept((service) -> {
                 service.stop();
                 PluginCall savedCall = watchCall;
@@ -327,8 +338,16 @@ public class BackgroundGeolocation extends Plugin {
                 }
                 call.resolve();
                 serviceConnectionFuture = null;
+                serviceStartedFuture = null;
             })
             .exceptionally((throwable) -> {
+                // Never leave the plugin wedged: if `serviceConnectionFuture` stayed
+                // set here, every later start() would be rejected with
+                // ALREADY_STARTED until the app process died.
+                releaseServiceConnection();
+                stopBackgroundService();
+                serviceConnectionFuture = null;
+                serviceStartedFuture = null;
                 call.reject("Service connection failed: " + throwable.getMessage());
                 return null;
             });
