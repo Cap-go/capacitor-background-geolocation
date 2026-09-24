@@ -54,7 +54,7 @@ import org.json.JSONObject;
 )
 public class BackgroundGeolocation extends Plugin {
 
-    private final String pluginVersion = "";
+    private final String pluginVersion = BuildConfig.PLUGIN_VERSION;
 
     private CompletableFuture<BackgroundGeolocationService.LocalBinder> serviceConnectionFuture;
     private ServiceConnection serviceConnection;
