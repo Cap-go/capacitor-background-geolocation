@@ -432,7 +432,12 @@ public class BackgroundGeolocationService extends Service {
             LocationStore.clear(getApplicationContext());
             nativePostUrl = null;
             stopWatchdog();
-            client.removeUpdates(locationCallback);
+            // stop() can reach a bound service whose start() has not run yet
+            // (JS calls start() then stop() back-to-back), in which case neither
+            // field is set. Same guard as onUnbind() and onDestroy().
+            if (client != null && locationCallback != null) {
+                client.removeUpdates(locationCallback);
+            }
             ServiceCompat.stopForeground(BackgroundGeolocationService.this, ServiceCompat.STOP_FOREGROUND_REMOVE);
             stopSelf();
             releaseMediaPlayer();
