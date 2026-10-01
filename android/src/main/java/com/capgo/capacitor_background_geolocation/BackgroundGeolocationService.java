@@ -329,11 +329,6 @@ public class BackgroundGeolocationService extends Service {
             // According to Android Studio, this method can throw a Security Exception if
             // permissions are not yet granted. Rather than check the permissions, which is fiddly,
             // we simply ignore the exception.
-        } catch (IllegalArgumentException e) {
-            // Thrown when the device has no GPS provider, for example a device without a GPS
-            // chip whose mock-location app has not registered one yet. Keep going, so the
-            // network fallback and the watchdog can still provide and retry updates.
-            Logger.error("GPS provider unavailable", e);
         }
         if (!networkFallbackEnabled) {
             return;
@@ -395,9 +390,10 @@ public class BackgroundGeolocationService extends Service {
             final long minIntervalMs,
             final boolean networkFallback
         ) {
-            // The plugin starts this service with startForegroundService(), so Android
-            // kills the app with an ANR unless startForeground() runs within a few
-            // seconds. Promote first, so no failure in the setup below can skip it.
+            // The plugin starts this service with startForegroundService(). If the setup
+            // below throws (for example 'provider "gps" does not exist' on a device without
+            // a GPS chip), the plugin stops the service again, and Android kills the app
+            // unless startForeground() already ran. So promote first.
             promoteToForeground(notificationTitle, notificationMessage);
             releaseMediaPlayer();
             acquireWakeLock();
