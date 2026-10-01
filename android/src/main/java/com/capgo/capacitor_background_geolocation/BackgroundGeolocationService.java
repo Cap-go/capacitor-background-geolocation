@@ -42,6 +42,8 @@ public class BackgroundGeolocationService extends Service {
 
     // Must be unique for this application.
     private static final int NOTIFICATION_ID = 28351;
+    static final String EXTRA_NOTIFICATION_TITLE = "notificationTitle";
+    static final String EXTRA_NOTIFICATION_MESSAGE = "notificationMessage";
 
     private String callbackId;
 
@@ -126,6 +128,12 @@ public class BackgroundGeolocationService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         Context context = getApplicationContext();
         if (!LocationStore.isEnabled(context)) {
+            // The plugin starts this service with startForegroundService(), and Android
+            // kills the app unless startForeground() follows within a few seconds. Promote
+            // here, so that it does not wait for the bind and the start() call behind it.
+            if (intent != null && intent.hasExtra(EXTRA_NOTIFICATION_TITLE)) {
+                promoteToForeground(intent.getStringExtra(EXTRA_NOTIFICATION_TITLE), intent.getStringExtra(EXTRA_NOTIFICATION_MESSAGE));
+            }
             // Not in native delivery mode: preserve the original behavior where the
             // service does not outlive the app, so it is not sticky-restarted.
             return START_NOT_STICKY;
