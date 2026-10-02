@@ -51,6 +51,8 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         CAPPluginMethod(name: "removeGeofence", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "removeAllGeofences", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getMonitoredGeofences", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getLocationLog", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearLocationLog", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "checkPermissions", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestPermissions", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "updateHeaders", returnType: CAPPluginReturnPromise),
@@ -84,6 +86,8 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     private var geofenceHeaders: [String: String] = [:]
     private var minIntervalMs: Double = 0
     private var lastPostedLocationTime: Date?
+    private var locationLogEnabled: Bool = false
+    private var locationLogMaxEntries: Int = LocationLog.defaultMaxEntries
 
     private let geofenceUrlKey = "CapgoBackgroundGeolocation.geofence.url"
     private let geofenceHeadersKey = "CapgoBackgroundGeolocation.geofence.headers"
@@ -126,6 +130,8 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             self.locationHeaders = self.stringHeaders(from: call.getObject("headers"))
             self.minIntervalMs = max(0, call.getDouble("minIntervalMs") ?? 0)
             self.lastPostedLocationTime = nil
+            self.locationLogEnabled = call.getBool("locationLog") ?? false
+            self.locationLogMaxEntries = max(1, call.getInt("locationLogMaxEntries") ?? LocationLog.defaultMaxEntries)
             // Create fresh location manager and initialize date
             self.locationManager = CLLocationManager()
             guard let manager = self.locationManager else {
@@ -204,6 +210,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             self.locationHeaders = [:]
             self.minIntervalMs = 0
             self.lastPostedLocationTime = nil
+            self.locationLogEnabled = false
 
             if let callbackId = self.activeCallbackId {
                 if let savedCall = self.bridge?.savedCall(withID: callbackId) {
@@ -474,6 +481,37 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         }
     }
 
+    @objc func getLocationLog(_ call: CAPPluginCall) {
+        guard isWholeNumberOrAbsent(call, "afterId"), isWholeNumberOrAbsent(call, "since") else {
+            return call.reject("afterId and since must be numbers")
+        }
+        let afterId = call.getDouble("afterId").map { Int64($0.rounded()) }
+        let since = call.getDouble("since").map { Int64($0.rounded()) }
+        let limit = call.getInt("limit") ?? LocationLog.defaultLimit
+        DispatchQueue.global(qos: .userInitiated).async {
+            call.resolve([
+                "entries": LocationLog.shared.entries(afterId: afterId, since: since, limit: limit)
+            ])
+        }
+    }
+
+    @objc func clearLocationLog(_ call: CAPPluginCall) {
+        guard isWholeNumberOrAbsent(call, "upToId") else {
+            return call.reject("upToId must be a number")
+        }
+        let upToId = call.getDouble("upToId").map { Int64($0.rounded()) }
+        DispatchQueue.global(qos: .userInitiated).async {
+            LocationLog.shared.clear(upToId: upToId)
+            call.resolve()
+        }
+    }
+
+    private func isWholeNumberOrAbsent(_ call: CAPPluginCall, _ key: String) -> Bool {
+        guard call.options[key] != nil else { return true }
+        guard let value = call.getDouble(key) else { return false }
+        return Int64(exactly: value.rounded()) != nil
+    }
+
     private func ensureGeofenceLocationManager() -> CLLocationManager {
         if let manager = geofenceLocationManager {
             return manager
@@ -675,7 +713,11 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             return
         }
         lastPostedLocationTime = location.timestamp
-        postJson(body, to: backendUrl, headers: locationHeaders, taskName: "CapgoLocationUpdate")
+        let logId = locationLogEnabled ? LocationLog.shared.insert(data, maxEntries: locationLogMaxEntries) : nil
+        postJson(body, to: backendUrl, headers: locationHeaders, taskName: "CapgoLocationUpdate") { httpStatus, error in
+            guard let logId else { return }
+            LocationLog.shared.complete(id: logId, httpStatus: httpStatus, error: error)
+        }
     }
 
     private func stringHeaders(from object: [String: Any]?) -> [String: String] {
@@ -693,7 +735,13 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         return headers
     }
 
-    private func postJson(_ body: Data, to url: URL, headers: [String: String], taskName: String) {
+    private func postJson(
+        _ body: Data,
+        to url: URL,
+        headers: [String: String],
+        taskName: String,
+        completion: ((Int?, Error?) -> Void)? = nil
+    ) {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -710,7 +758,8 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
                 backgroundTask = .invalid
             }
         }
-        URLSession.shared.dataTask(with: request) { _, _, _ in
+        URLSession.shared.dataTask(with: request) { _, response, error in
+            completion?((response as? HTTPURLResponse)?.statusCode, error)
             if backgroundTask != .invalid {
                 UIApplication.shared.endBackgroundTask(backgroundTask)
                 backgroundTask = .invalid

@@ -30,6 +30,8 @@ final class LocationStore {
     private static final String KEY_HEADERS = "headers";
     private static final String KEY_MIN_INTERVAL_MS = "minIntervalMs";
     private static final String KEY_NETWORK_FALLBACK = "networkFallback";
+    private static final String KEY_LOCATION_LOG = "locationLog";
+    private static final String KEY_LOCATION_LOG_MAX_ENTRIES = "locationLogMaxEntries";
     private static final String KEY_LAST_POST_TIME = "lastPostTime";
 
     private LocationStore() {}
@@ -47,7 +49,9 @@ final class LocationStore {
         float distanceFilter,
         Map<String, String> headers,
         long minIntervalMs,
-        boolean networkFallback
+        boolean networkFallback,
+        boolean locationLog,
+        int locationLogMaxEntries
     ) {
         SharedPreferences.Editor editor = prefs(context).edit();
         if (url == null || url.isEmpty()) {
@@ -62,6 +66,8 @@ final class LocationStore {
                 .putString(KEY_HEADERS, headersToJson(headers))
                 .putLong(KEY_MIN_INTERVAL_MS, Math.max(0L, minIntervalMs))
                 .putBoolean(KEY_NETWORK_FALLBACK, networkFallback)
+                .putBoolean(KEY_LOCATION_LOG, locationLog)
+                .putInt(KEY_LOCATION_LOG_MAX_ENTRIES, Math.max(1, locationLogMaxEntries))
                 .remove(KEY_LAST_POST_TIME);
         }
         editor.apply();
@@ -104,6 +110,14 @@ final class LocationStore {
         return prefs(context).getBoolean(KEY_NETWORK_FALLBACK, false);
     }
 
+    static boolean getLocationLog(Context context) {
+        return prefs(context).getBoolean(KEY_LOCATION_LOG, false);
+    }
+
+    static int getLocationLogMaxEntries(Context context) {
+        return prefs(context).getInt(KEY_LOCATION_LOG_MAX_ENTRIES, LocationLog.DEFAULT_MAX_ENTRIES);
+    }
+
     static Map<String, String> getHeaders(Context context) {
         return headersFromJson(prefs(context).getString(KEY_HEADERS, null));
     }
@@ -129,17 +143,31 @@ final class LocationStore {
         prefs(context).edit().putLong(KEY_LAST_POST_TIME, locationTimeMs).apply();
     }
 
+    // Adds a location to the location log as pending, when the log is on and a
+    // url is set. Returns its identifier, or -1 if it was not added.
+    static long logLocation(Context context, JSONObject data) {
+        String url = getUrl(context);
+        if (url == null || url.isEmpty() || !getLocationLog(context)) {
+            return -1;
+        }
+        return LocationLog.getInstance(context).insert(data, getLocationLogMaxEntries(context));
+    }
+
     // POSTs a single location as JSON to the configured url. Runs synchronously,
-    // so callers must invoke it off the main thread.
-    static void sendLocation(Context context, JSONObject data) throws IOException {
+    // so callers must invoke it off the main thread. logId is the location's
+    // entry in the location log, or -1, and gets the outcome of the request.
+    static void sendLocation(Context context, JSONObject data, long logId) throws IOException {
         String urlString = getUrl(context);
         if (urlString == null || urlString.isEmpty()) {
             return;
         }
+        LocationLog log = LocationLog.getInstance(context);
         long locationTimeMs = data.optLong("time", System.currentTimeMillis());
         if (!shouldPost(context, locationTimeMs)) {
+            log.remove(logId);
             return;
         }
+        Integer responseCode = null;
         HttpURLConnection connection = null;
         try {
             URL url = new URL(urlString);
@@ -158,12 +186,16 @@ final class LocationStore {
             try (OutputStream outputStream = connection.getOutputStream()) {
                 outputStream.write(body);
             }
-            int responseCode = connection.getResponseCode();
+            responseCode = connection.getResponseCode();
             Logger.debug("Location POST finished with response code: " + responseCode);
             if (responseCode < HttpURLConnection.HTTP_OK || responseCode >= HttpURLConnection.HTTP_MULT_CHOICE) {
                 throw new IOException("Location POST failed with response code: " + responseCode);
             }
             markPosted(context, locationTimeMs);
+            log.update(logId, LocationLog.STATUS_SENT, responseCode, null);
+        } catch (IOException | RuntimeException exception) {
+            log.update(logId, LocationLog.STATUS_FAILED, responseCode, exception.getMessage());
+            throw exception;
         } finally {
             if (connection != null) {
                 connection.disconnect();

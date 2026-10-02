@@ -152,7 +152,9 @@ public class BackgroundGeolocation extends Plugin {
                 call.getString("url", null),
                 headersFromCall(call),
                 longOptionFromCall(call, "minIntervalMs", 0L),
-                call.getBoolean("networkFallback", false)
+                call.getBoolean("networkFallback", false),
+                call.getBoolean("locationLog", false),
+                call.getInt("locationLogMaxEntries", LocationLog.DEFAULT_MAX_ENTRIES)
             );
         });
         serviceStartedFuture.exceptionally((throwable) -> {
@@ -610,6 +612,34 @@ public class BackgroundGeolocation extends Plugin {
         call.resolve(result);
     }
 
+    @PluginMethod
+    public void getLocationLog(PluginCall call) {
+        if (!isNumberOrAbsent(call, "afterId") || !isNumberOrAbsent(call, "since")) {
+            call.reject("afterId and since must be numbers");
+            return;
+        }
+        JSObject result = new JSObject();
+        result.put(
+            "entries",
+            LocationLog.getInstance(getContext()).query(
+                nullableLongFromCall(call, "afterId"),
+                nullableLongFromCall(call, "since"),
+                call.getInt("limit", LocationLog.DEFAULT_LIMIT)
+            )
+        );
+        call.resolve(result);
+    }
+
+    @PluginMethod
+    public void clearLocationLog(PluginCall call) {
+        if (!isNumberOrAbsent(call, "upToId")) {
+            call.reject("upToId must be a number");
+            return;
+        }
+        LocationLog.getInstance(getContext()).clear(nullableLongFromCall(call, "upToId"));
+        call.resolve();
+    }
+
     private CompletableFuture<Void> requestGeofencePermissions(PluginCall call, boolean backgroundLocation) {
         if (hasGeofencePermissions(backgroundLocation)) {
             return CompletableFuture.completedFuture(null);
@@ -725,6 +755,14 @@ public class BackgroundGeolocation extends Plugin {
     // fit in 32 bits cross the bridge as Integer, so optLong is required (issue #62).
     static long longOptionFromCall(PluginCall call, String key, long defaultValue) {
         return call.getData().optLong(key, defaultValue);
+    }
+
+    private static Long nullableLongFromCall(PluginCall call, String key) {
+        return call.getData().isNull(key) ? null : call.getData().optLong(key);
+    }
+
+    static boolean isNumberOrAbsent(PluginCall call, String key) {
+        return !call.getData().has(key) || call.getData().opt(key) instanceof Number;
     }
 
     private static Map<String, String> headersFromCall(PluginCall call) {

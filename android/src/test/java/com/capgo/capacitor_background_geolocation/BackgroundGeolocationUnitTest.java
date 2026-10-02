@@ -11,6 +11,7 @@ import com.getcapacitor.PluginCall;
 import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofenceStatusCodes;
 import org.json.JSONException;
+import org.json.JSONObject;
 import org.junit.Test;
 
 /**
@@ -232,4 +233,25 @@ public class BackgroundGeolocationUnitTest {
     private static class ForegroundServiceStartNotAllowedException extends RuntimeException {}
 
     private static class ServiceStartNotAllowedException extends RuntimeException {}
+
+    @Test
+    public void testIsNumberOrAbsentAcceptsNumbersAndMissingKeys() {
+        JSObject data = new JSObject();
+        data.put("afterId", 4211);
+        PluginCall call = new PluginCall(null, "BackgroundGeolocation", "test-callback", "getLocationLog", data);
+
+        assertTrue(BackgroundGeolocation.isNumberOrAbsent(call, "afterId"));
+        assertTrue(BackgroundGeolocation.isNumberOrAbsent(call, "since"));
+    }
+
+    @Test
+    public void testIsNumberOrAbsentRejectsOtherValues() {
+        JSObject data = new JSObject();
+        data.put("upToId", JSONObject.NULL);
+        data.put("afterId", "4211");
+        PluginCall call = new PluginCall(null, "BackgroundGeolocation", "test-callback", "clearLocationLog", data);
+
+        assertFalse(BackgroundGeolocation.isNumberOrAbsent(call, "upToId"));
+        assertFalse(BackgroundGeolocation.isNumberOrAbsent(call, "afterId"));
+    }
 }

@@ -280,16 +280,18 @@ public class BackgroundGeolocationService extends Service {
     }
 
     // Delivers a location to the configured URL from native code, so it works
-    // even when the WebView/JavaScript layer no longer exists.
+    // even when the WebView/JavaScript layer no longer exists. The location is
+    // logged before it is queued, so it is kept while earlier POSTs still wait.
     private void postLocationNatively(android.location.Location location) {
         if (postExecutor == null) {
             postExecutor = Executors.newSingleThreadExecutor();
         }
         Context context = getApplicationContext();
         JSONObject payload = locationToJson(location);
+        long logId = LocationStore.logLocation(context, payload);
         postExecutor.execute(() -> {
             try {
-                LocationStore.sendLocation(context, payload);
+                LocationStore.sendLocation(context, payload, logId);
             } catch (Exception e) {
                 Logger.error("Native location POST failed", e);
             }
@@ -396,7 +398,9 @@ public class BackgroundGeolocationService extends Service {
             final String url,
             final Map<String, String> headers,
             final long minIntervalMs,
-            final boolean networkFallback
+            final boolean networkFallback,
+            final boolean locationLog,
+            final int locationLogMaxEntries
         ) {
             // The plugin starts this service with startForegroundService(). If the setup
             // below throws (for example 'provider "gps" does not exist' on a device without
@@ -421,7 +425,9 @@ public class BackgroundGeolocationService extends Service {
                 distanceFilter,
                 headers,
                 currentMinIntervalMs,
-                networkFallback
+                networkFallback,
+                locationLog,
+                locationLogMaxEntries
             );
 
             // The service may already be running (for example after a sticky
