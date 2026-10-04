@@ -63,6 +63,7 @@ public class BackgroundGeolocation extends Plugin {
     private ServiceConnection serviceConnection;
     private CompletableFuture<Void> locationPermissionFuture;
     private CompletableFuture<Void> geofencePermissionFuture;
+    private boolean pendingStop;
     private PluginCall watchCall;
 
     private void fetchLastLocation(PluginCall call) {
@@ -94,9 +95,19 @@ public class BackgroundGeolocation extends Plugin {
             watchCall = call;
             requestLocationPermissions(call)
                 .thenRun(() -> {
+                    if (pendingStop) {
+                        pendingStop = false;
+                        PluginCall savedCall = watchCall;
+                        watchCall = null;
+                        if (savedCall != null) {
+                            savedCall.setKeepAlive(false);
+                        }
+                        return;
+                    }
                     proceedWithStart(call);
                 })
                 .exceptionally((throwable) -> {
+                    pendingStop = false;
                     call.reject("User denied location permission", "NOT_AUTHORIZED");
                     return null;
                 });
@@ -316,6 +327,16 @@ public class BackgroundGeolocation extends Plugin {
     @PluginMethod
     public void stop(PluginCall call) {
         if (serviceConnectionFuture == null) {
+            if (locationPermissionFuture != null && !locationPermissionFuture.isDone()) {
+                pendingStop = true;
+                PluginCall savedCall = watchCall;
+                watchCall = null;
+                if (savedCall != null) {
+                    savedCall.setKeepAlive(false);
+                }
+                call.resolve();
+                return;
+            }
             call.resolve();
             return;
         }
@@ -325,9 +346,7 @@ public class BackgroundGeolocation extends Plugin {
         // in LIFO order), leaving tracking running after stop() resolved.
         CompletableFuture<Void> started = serviceStartedFuture;
         CompletableFuture<BackgroundGeolocationService.LocalBinder> ready =
-            started == null
-                ? getServiceConnection()
-                : started.exceptionally((ignored) -> null).thenCompose((ignored) -> getServiceConnection());
+            started == null ? getServiceConnection() : started.thenCompose((ignored) -> getServiceConnection());
         ready
             .thenAccept((service) -> {
                 service.stop();
