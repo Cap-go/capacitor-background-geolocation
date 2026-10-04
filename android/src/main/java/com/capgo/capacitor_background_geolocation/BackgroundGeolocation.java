@@ -36,6 +36,7 @@ import java.net.URL;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
@@ -63,7 +64,9 @@ public class BackgroundGeolocation extends Plugin {
     private ServiceConnection serviceConnection;
     private CompletableFuture<Void> locationPermissionFuture;
     private CompletableFuture<Void> geofencePermissionFuture;
-    private boolean pendingStop;
+    private final Set<PluginCall> canceledPermissionStarts = Collections.synchronizedSet(
+        Collections.newSetFromMap(new IdentityHashMap<PluginCall, Boolean>())
+    );
     private PluginCall watchCall;
 
     private void fetchLastLocation(PluginCall call) {
@@ -91,23 +94,25 @@ public class BackgroundGeolocation extends Plugin {
         }
 
         if (getPermissionState("location") != PermissionState.GRANTED && call.getBoolean("requestPermissions", true)) {
+            if (locationPermissionFuture != null && !locationPermissionFuture.isDone()) {
+                call.reject("Service already started", "ALREADY_STARTED");
+                return;
+            }
             call.setKeepAlive(true);
             watchCall = call;
             requestLocationPermissions(call)
                 .thenRun(() -> {
-                    if (pendingStop) {
-                        pendingStop = false;
-                        PluginCall savedCall = watchCall;
-                        watchCall = null;
-                        if (savedCall != null) {
-                            savedCall.setKeepAlive(false);
+                    if (canceledPermissionStarts.remove(call)) {
+                        if (watchCall == call) {
+                            watchCall = null;
+                            call.setKeepAlive(false);
                         }
                         return;
                     }
                     proceedWithStart(call);
                 })
                 .exceptionally((throwable) -> {
-                    pendingStop = false;
+                    canceledPermissionStarts.remove(call);
                     call.reject("User denied location permission", "NOT_AUTHORIZED");
                     return null;
                 });
@@ -328,8 +333,10 @@ public class BackgroundGeolocation extends Plugin {
     public void stop(PluginCall call) {
         if (serviceConnectionFuture == null) {
             if (locationPermissionFuture != null && !locationPermissionFuture.isDone()) {
-                pendingStop = true;
                 PluginCall savedCall = watchCall;
+                if (savedCall != null) {
+                    canceledPermissionStarts.add(savedCall);
+                }
                 watchCall = null;
                 if (savedCall != null) {
                     savedCall.setKeepAlive(false);
