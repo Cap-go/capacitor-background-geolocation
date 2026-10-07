@@ -1,10 +1,28 @@
 # Background Geolocation
-<a href="https://capgo.app/"><img src="https://capgo.app/readme-banner.svg?repo=Cap-go/capacitor-background-geolocation" alt="Capgo - Instant updates for Capacitor" /></a>
+
+Track precise location in the background and monitor native geofences on iOS and Android. Built for delivery, fitness and field service apps that keep tracking when the screen is off.
+
+<a href="https://capgo.app/?ref=plugin_background_geolocation"><img src="https://capgo.app/readme-banner.svg?repo=Cap-go/capacitor-background-geolocation" alt="Capgo - Instant updates for Capacitor" /></a>
 
 <div align="center">
-  <h2><a href="https://capgo.app/?ref=plugin_background_geolocation"> ➡️ Get Instant updates for your App with Capgo</a></h2>
-  <h2><a href="https://capgo.app/consulting/?ref=plugin_background_geolocation"> Missing a feature? We’ll build the plugin for you 💪</a></h2>
+  <p><b>Capgo</b>: open-source live updates for Ionic and Capacitor apps. Ship OTA fixes and features instantly, without waiting for app store review.</p>
+  <h2><a href="https://capgo.app/register/?ref=plugin_background_geolocation">➡️ Get started for free</a></h2>
+  <p>14-day unlimited free trial. No credit card required</p>
+  <p><a href="https://capgo.app/consulting/?ref=plugin_background_geolocation">Missing a feature? We'll build the plugin for you 💪</a></p>
 </div>
+
+<p align="center">
+  <img src="https://raw.githubusercontent.com/Cap-go/capacitor-background-geolocation/main/assets/github-social-preview.png" alt="@capgo/background-geolocation for Capacitor apps" width="300" />
+</p>
+
+## Key features
+
+- **Background tracking**: `start()` streams location updates with options such as `distanceFilter` and a background notification message, `stop()` ends them.
+- **Native uploads**: send locations to your `url` from native code, and change headers on the fly with `updateHeaders()`.
+- **Geofencing**: `addGeofence()`, `removeGeofence()`, `removeAllGeofences()` and `getMonitoredGeofences()`, with `geofenceTransition` and `geofenceError` events.
+- **Route guidance**: `setPlannedRoute()` plays a sound when the user leaves a planned route.
+- **Permissions**: `checkPermissions()`, `requestPermissions()` and `openSettings()`.
+- **Platforms**: iOS and Android. iOS uses Core Location, Android uses Google Play services location with a foreground service.
 
 A Capacitor plugin for accurate background location tracking and native geofencing on iOS and Android.
 Use it to stream precise location updates, monitor circular geofence regions, react to enter/exit events in JavaScript, and POST geofence transitions natively while the WebView is suspended.
@@ -29,7 +47,7 @@ So I created a fork and started maintaining it [here](https://github.com/HaylLtd
 It served me well for over half a decade, but I felt it was hard to maintain due to all its history, features, and bug fixes.  
 I also felt like there was a barrier to introducing new features because of its complexity.
 
-So I started exploring what it would take to reduce that complexity—at the same time, I was envious of how small [`@capacitor-community/background-geolocation`](https://github.com/capacitor-community/background-geolocation) is.  
+So I started exploring what it would take to reduce that complexity, at the same time, I was envious of how small [`@capacitor-community/background-geolocation`](https://github.com/capacitor-community/background-geolocation) is.  
 I took the best of both worlds: tried to reduce the codebase in the original Cordova plugin and add some robustness to the Capacitor plugin.  
 
 That's how I ended up maintaining this one.  
