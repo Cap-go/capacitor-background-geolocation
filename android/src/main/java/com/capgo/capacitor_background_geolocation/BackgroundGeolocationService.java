@@ -256,7 +256,7 @@ public class BackgroundGeolocationService extends Service {
         if (LocationManager.GPS_PROVIDER.equals(location.getProvider())) {
             lastGpsFixAtMs = SystemClock.elapsedRealtime();
         } else if (LocationManager.NETWORK_PROVIDER.equals(location.getProvider())) {
-            boolean gpsStillFresh = lastGpsFixAtMs != 0 && (SystemClock.elapsedRealtime() - lastGpsFixAtMs) < NETWORK_FALLBACK_GRACE_MS;
+            boolean gpsStillFresh = lastGpsFixAtMs != 0 && SystemClock.elapsedRealtime() - lastGpsFixAtMs < NETWORK_FALLBACK_GRACE_MS;
             boolean tooImprecise = !location.hasAccuracy() || location.getAccuracy() > NETWORK_FIX_MAX_ACCURACY_M;
             if (gpsStillFresh || tooImprecise) {
                 // Drop it - and skip startWatchdog() below so a run of rejected fixes can't mask a
@@ -412,7 +412,7 @@ public class BackgroundGeolocationService extends Service {
             currentMinIntervalMs = Math.max(0L, minIntervalMs);
             networkFallbackEnabled = networkFallback;
 
-            nativePostUrl = (url == null || url.isEmpty()) ? null : url;
+            nativePostUrl = url == null || url.isEmpty() ? null : url;
             LocationStore.saveSetup(
                 getApplicationContext(),
                 nativePostUrl,
