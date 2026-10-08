@@ -358,42 +358,52 @@ public class BackgroundGeolocation extends Plugin {
         // Without this, a start() immediately followed by stop() can deliver the
         // stop to the service before the start (CompletableFuture runs dependents
         // in LIFO order), leaving tracking running after stop() resolved.
+        CompletableFuture<BackgroundGeolocationService.LocalBinder> connectionAtStop = serviceConnectionFuture;
+        PluginCall watchCallAtStop = watchCall;
         CompletableFuture<Void> started = serviceStartedFuture;
         CompletableFuture<BackgroundGeolocationService.LocalBinder> ready =
             started == null
-                ? getServiceConnection()
+                ? connectionAtStop
                 : started
                       .handle((ignored, startError) -> null)
                       .thenCompose((ignored) -> {
-                          CompletableFuture<BackgroundGeolocationService.LocalBinder> current = serviceConnectionFuture;
-                          if (current == null || current.isCompletedExceptionally()) {
+                          if (
+                              connectionAtStop == null ||
+                              serviceConnectionFuture != connectionAtStop ||
+                              connectionAtStop.isCompletedExceptionally()
+                          ) {
                               // Start failed and was already cleaned up; nothing to stop.
                               return CompletableFuture.completedFuture(null);
                           }
-                          return current;
+                          return connectionAtStop;
                       });
         ready
             .thenAccept((service) -> {
-                if (service != null) {
+                if (service != null && serviceConnectionFuture == connectionAtStop && serviceStartedFuture == started) {
                     service.stop();
                 }
-                PluginCall savedCall = watchCall;
-                watchCall = null;
-                if (savedCall != null) {
-                    savedCall.setKeepAlive(false);
+                if (watchCall == watchCallAtStop) {
+                    watchCall = null;
+                    if (watchCallAtStop != null) {
+                        watchCallAtStop.setKeepAlive(false);
+                    }
                 }
                 call.resolve();
-                serviceConnectionFuture = null;
-                serviceStartedFuture = null;
+                if (serviceConnectionFuture == connectionAtStop && serviceStartedFuture == started) {
+                    serviceConnectionFuture = null;
+                    serviceStartedFuture = null;
+                }
             })
             .exceptionally((throwable) -> {
                 // Never leave the plugin wedged: if `serviceConnectionFuture` stayed
                 // set here, every later start() would be rejected with
                 // ALREADY_STARTED until the app process died.
-                releaseServiceConnection();
-                stopBackgroundService();
-                serviceConnectionFuture = null;
-                serviceStartedFuture = null;
+                if (serviceConnectionFuture == connectionAtStop) {
+                    releaseServiceConnection();
+                    stopBackgroundService();
+                    serviceConnectionFuture = null;
+                    serviceStartedFuture = null;
+                }
                 call.reject("Service connection failed: " + throwable.getMessage());
                 return null;
             });
