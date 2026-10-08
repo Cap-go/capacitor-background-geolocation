@@ -42,6 +42,8 @@ public class BackgroundGeolocationService extends Service {
 
     // Must be unique for this application.
     private static final int NOTIFICATION_ID = 28351;
+    static final String EXTRA_NOTIFICATION_TITLE = "notificationTitle";
+    static final String EXTRA_NOTIFICATION_MESSAGE = "notificationMessage";
 
     private String callbackId;
 
@@ -126,6 +128,12 @@ public class BackgroundGeolocationService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         Context context = getApplicationContext();
         if (!LocationStore.isEnabled(context)) {
+            // The plugin starts this service with startForegroundService(), and Android
+            // kills the app unless startForeground() follows within a few seconds. Promote
+            // here, so that it does not wait for the bind and the start() call behind it.
+            if (intent != null && intent.hasExtra(EXTRA_NOTIFICATION_TITLE)) {
+                promoteToForeground(intent.getStringExtra(EXTRA_NOTIFICATION_TITLE), intent.getStringExtra(EXTRA_NOTIFICATION_MESSAGE));
+            }
             // Not in native delivery mode: preserve the original behavior where the
             // service does not outlive the app, so it is not sticky-restarted.
             return START_NOT_STICKY;
@@ -390,6 +398,11 @@ public class BackgroundGeolocationService extends Service {
             final long minIntervalMs,
             final boolean networkFallback
         ) {
+            // The plugin starts this service with startForegroundService(). If the setup
+            // below throws (for example 'provider "gps" does not exist' on a device without
+            // a GPS chip), the plugin stops the service again, and Android kills the app
+            // unless startForeground() already ran. So promote first.
+            promoteToForeground(notificationTitle, notificationMessage);
             releaseMediaPlayer();
             acquireWakeLock();
             client = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
@@ -421,7 +434,6 @@ public class BackgroundGeolocationService extends Service {
             // Arm the watchdog here so rejected network fixes during the grace period cannot
             // leave tracking without a restart path if GPS_PROVIDER goes silent.
             startWatchdog();
-            promoteToForeground(notificationTitle, notificationMessage);
         }
 
         void updateHeaders(final Map<String, String> headers) {
