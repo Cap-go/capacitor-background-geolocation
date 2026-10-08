@@ -94,7 +94,7 @@ public class BackgroundGeolocation extends Plugin {
         }
 
         if (getPermissionState("location") != PermissionState.GRANTED && call.getBoolean("requestPermissions", true)) {
-            if (locationPermissionFuture != null && !locationPermissionFuture.isDone()) {
+            if (locationPermissionFuture != null && !locationPermissionFuture.isDone() && watchCall != null) {
                 call.reject("Service already started", "ALREADY_STARTED");
                 return;
             }
