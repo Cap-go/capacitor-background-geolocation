@@ -108,13 +108,21 @@ final class GeofenceStore {
 
         Set<String> regionIds = getRegionIds(context);
         regionIds.add(identifier);
-        prefs(context).edit().putStringSet(KEY_REGION_IDS, regionIds).putString(KEY_REGION_PREFIX + identifier, region.toString()).apply();
+        prefs(context)
+            .edit()
+            .putStringSet(KEY_REGION_IDS, regionIds)
+            .putString(KEY_REGION_PREFIX + identifier, region.toString())
+            .apply();
     }
 
     static void removeRegion(Context context, String identifier) {
         Set<String> regionIds = getRegionIds(context);
         regionIds.remove(identifier);
-        prefs(context).edit().putStringSet(KEY_REGION_IDS, regionIds).remove(KEY_REGION_PREFIX + identifier).apply();
+        prefs(context)
+            .edit()
+            .putStringSet(KEY_REGION_IDS, regionIds)
+            .remove(KEY_REGION_PREFIX + identifier)
+            .apply();
     }
 
     static void clearRegions(Context context) {

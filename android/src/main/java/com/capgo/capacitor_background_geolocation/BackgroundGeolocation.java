@@ -55,7 +55,7 @@ import org.json.JSONObject;
 )
 public class BackgroundGeolocation extends Plugin {
 
-    private final String pluginVersion = "";
+    private final String pluginVersion = BuildConfig.PLUGIN_VERSION;
 
     private CompletableFuture<BackgroundGeolocationService.LocalBinder> serviceConnectionFuture;
     // Completes once `serviceBinder.start(...)` has actually run, so `stop()` can
@@ -135,12 +135,19 @@ public class BackgroundGeolocation extends Plugin {
         if (call.getBoolean("stale", false)) {
             fetchLastLocation(call);
         }
-        CompletableFuture<BackgroundGeolocationService.LocalBinder> connectionFuture = getServiceConnection();
+        String backgroundTitle = call.getString("backgroundTitle", "Using your location");
+        String backgroundMessage = call.getString("backgroundMessage", "");
+        // The service promotes itself from these extras in onStartCommand(), without
+        // waiting for the bind.
+        Intent startIntent = createServiceIntent()
+            .putExtra(BackgroundGeolocationService.EXTRA_NOTIFICATION_TITLE, backgroundTitle)
+            .putExtra(BackgroundGeolocationService.EXTRA_NOTIFICATION_MESSAGE, backgroundMessage);
+        CompletableFuture<BackgroundGeolocationService.LocalBinder> connectionFuture = getServiceConnection(startIntent);
         serviceStartedFuture = connectionFuture.thenAccept((serviceBinder) -> {
             serviceBinder.start(
                 call.getCallbackId(),
-                call.getString("backgroundTitle", "Using your location"),
-                call.getString("backgroundMessage", ""),
+                backgroundTitle,
+                backgroundMessage,
                 call.getFloat("distanceFilter", 0f),
                 call.getString("url", null),
                 headersFromCall(call),
@@ -800,6 +807,10 @@ public class BackgroundGeolocation extends Plugin {
     }
 
     private CompletableFuture<BackgroundGeolocationService.LocalBinder> getServiceConnection() {
+        return getServiceConnection(createServiceIntent());
+    }
+
+    private CompletableFuture<BackgroundGeolocationService.LocalBinder> getServiceConnection(Intent serviceIntent) {
         if (serviceConnectionFuture != null && !serviceConnectionFuture.isCompletedExceptionally()) {
             return serviceConnectionFuture;
         }
@@ -807,7 +818,6 @@ public class BackgroundGeolocation extends Plugin {
         CompletableFuture<BackgroundGeolocationService.LocalBinder> connectionFuture = new CompletableFuture<>();
         serviceConnectionFuture = connectionFuture;
 
-        Intent serviceIntent = createServiceIntent();
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 this.getContext().startForegroundService(serviceIntent);
