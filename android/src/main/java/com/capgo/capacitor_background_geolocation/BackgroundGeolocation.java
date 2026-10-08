@@ -360,10 +360,23 @@ public class BackgroundGeolocation extends Plugin {
         // in LIFO order), leaving tracking running after stop() resolved.
         CompletableFuture<Void> started = serviceStartedFuture;
         CompletableFuture<BackgroundGeolocationService.LocalBinder> ready =
-            started == null ? getServiceConnection() : started.thenCompose((ignored) -> getServiceConnection());
+            started == null
+                ? getServiceConnection()
+                : started
+                      .handle((ignored, startError) -> null)
+                      .thenCompose((ignored) -> {
+                          CompletableFuture<BackgroundGeolocationService.LocalBinder> current = serviceConnectionFuture;
+                          if (current == null || current.isCompletedExceptionally()) {
+                              // Start failed and was already cleaned up; nothing to stop.
+                              return CompletableFuture.completedFuture(null);
+                          }
+                          return current;
+                      });
         ready
             .thenAccept((service) -> {
-                service.stop();
+                if (service != null) {
+                    service.stop();
+                }
                 PluginCall savedCall = watchCall;
                 watchCall = null;
                 if (savedCall != null) {
