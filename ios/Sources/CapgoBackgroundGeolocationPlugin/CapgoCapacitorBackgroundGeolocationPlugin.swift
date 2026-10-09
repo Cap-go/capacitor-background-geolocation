@@ -132,6 +132,10 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             self.lastPostedLocationTime = nil
             self.locationLogEnabled = call.getBool("locationLog") ?? false
             self.locationLogMaxEntries = max(1, call.getInt("locationLogMaxEntries") ?? LocationLog.defaultMaxEntries)
+            if self.locationLogEnabled {
+                // Open the log now, so the first location does not open it on the main thread
+                DispatchQueue.global(qos: .utility).async { _ = LocationLog.shared }
+            }
             // Create fresh location manager and initialize date
             self.locationManager = CLLocationManager()
             guard let manager = self.locationManager else {

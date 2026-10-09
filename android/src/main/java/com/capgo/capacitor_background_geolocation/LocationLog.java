@@ -83,6 +83,16 @@ final class LocationLog extends SQLiteOpenHelper {
         db.update(TABLE, values, "status = ?", new String[] { STATUS_PENDING });
     }
 
+    // Opens the database ahead of the first location, which would otherwise
+    // open it on the main thread.
+    void open() {
+        try {
+            getWritableDatabase();
+        } catch (RuntimeException exception) {
+            Logger.error("Could not open the location log", exception);
+        }
+    }
+
     // Adds a location as pending and returns its identifier, or -1 if it could
     // not be added. The oldest entries beyond maxEntries are removed.
     long insert(JSONObject location, int maxEntries) {

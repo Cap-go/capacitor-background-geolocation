@@ -41,6 +41,10 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executor;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -68,6 +72,9 @@ public class BackgroundGeolocation extends Plugin {
         Collections.newSetFromMap(new IdentityHashMap<PluginCall, Boolean>())
     );
     private PluginCall watchCall;
+    // Reads and clears the location log one call at a time, off the plugin thread.
+    // Its thread ends when idle, so there is nothing to shut down.
+    private final Executor locationLogExecutor = new ThreadPoolExecutor(0, 1, 30, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
 
     private void fetchLastLocation(PluginCall call) {
         try {
@@ -618,16 +625,15 @@ public class BackgroundGeolocation extends Plugin {
             call.reject("afterId and since must be numbers");
             return;
         }
-        JSObject result = new JSObject();
-        result.put(
-            "entries",
-            LocationLog.getInstance(getContext()).query(
-                nullableLongFromCall(call, "afterId"),
-                nullableLongFromCall(call, "since"),
-                call.getInt("limit", LocationLog.DEFAULT_LIMIT)
-            )
-        );
-        call.resolve(result);
+        Context context = getContext();
+        Long afterId = nullableLongFromCall(call, "afterId");
+        Long since = nullableLongFromCall(call, "since");
+        int limit = call.getInt("limit", LocationLog.DEFAULT_LIMIT);
+        locationLogExecutor.execute(() -> {
+            JSObject result = new JSObject();
+            result.put("entries", LocationLog.getInstance(context).query(afterId, since, limit));
+            call.resolve(result);
+        });
     }
 
     @PluginMethod
@@ -636,8 +642,12 @@ public class BackgroundGeolocation extends Plugin {
             call.reject("upToId must be a number");
             return;
         }
-        LocationLog.getInstance(getContext()).clear(nullableLongFromCall(call, "upToId"));
-        call.resolve();
+        Context context = getContext();
+        Long upToId = nullableLongFromCall(call, "upToId");
+        locationLogExecutor.execute(() -> {
+            LocationLog.getInstance(context).clear(upToId);
+            call.resolve();
+        });
     }
 
     private CompletableFuture<Void> requestGeofencePermissions(PluginCall call, boolean backgroundLocation) {

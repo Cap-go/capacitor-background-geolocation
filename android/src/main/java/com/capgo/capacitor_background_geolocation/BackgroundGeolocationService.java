@@ -140,6 +140,7 @@ public class BackgroundGeolocationService extends Service {
         }
         nativePostUrl = LocationStore.getUrl(context);
         promoteToForeground(LocationStore.getTitle(context), LocationStore.getMessage(context));
+        openLocationLog();
         if (client == null || locationCallback == null) {
             acquireWakeLock();
             client = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
@@ -298,6 +299,19 @@ public class BackgroundGeolocationService extends Service {
         });
     }
 
+    // Opens the location log on the POST thread, so the first location does not
+    // have to open it on the main thread.
+    private void openLocationLog() {
+        Context context = getApplicationContext();
+        if (nativePostUrl == null || !LocationStore.getLocationLog(context)) {
+            return;
+        }
+        if (postExecutor == null) {
+            postExecutor = Executors.newSingleThreadExecutor();
+        }
+        postExecutor.execute(() -> LocationLog.getInstance(context).open());
+    }
+
     private static JSONObject locationToJson(android.location.Location location) {
         JSONObject obj = new JSONObject();
         try {
@@ -429,6 +443,7 @@ public class BackgroundGeolocationService extends Service {
                 locationLog,
                 locationLogMaxEntries
             );
+            openLocationLog();
 
             // The service may already be running (for example after a sticky
             // restart), so drop any previous listener before registering a new one.
