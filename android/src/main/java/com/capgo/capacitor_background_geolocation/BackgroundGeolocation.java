@@ -36,6 +36,7 @@ import java.net.URL;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
@@ -57,9 +58,15 @@ public class BackgroundGeolocation extends Plugin {
     private final String pluginVersion = BuildConfig.PLUGIN_VERSION;
 
     private CompletableFuture<BackgroundGeolocationService.LocalBinder> serviceConnectionFuture;
+    // Completes once `serviceBinder.start(...)` has actually run, so `stop()` can
+    // wait for it instead of racing it on the raw service binding.
+    private CompletableFuture<Void> serviceStartedFuture;
     private ServiceConnection serviceConnection;
     private CompletableFuture<Void> locationPermissionFuture;
     private CompletableFuture<Void> geofencePermissionFuture;
+    private final Set<PluginCall> canceledPermissionStarts = Collections.synchronizedSet(
+        Collections.newSetFromMap(new IdentityHashMap<PluginCall, Boolean>())
+    );
     private PluginCall watchCall;
 
     private void fetchLastLocation(PluginCall call) {
@@ -87,13 +94,25 @@ public class BackgroundGeolocation extends Plugin {
         }
 
         if (getPermissionState("location") != PermissionState.GRANTED && call.getBoolean("requestPermissions", true)) {
+            if (locationPermissionFuture != null && !locationPermissionFuture.isDone() && watchCall != null) {
+                call.reject("Service already started", "ALREADY_STARTED");
+                return;
+            }
             call.setKeepAlive(true);
             watchCall = call;
             requestLocationPermissions(call)
                 .thenRun(() -> {
+                    if (canceledPermissionStarts.remove(call)) {
+                        if (watchCall == call) {
+                            watchCall = null;
+                            call.setKeepAlive(false);
+                        }
+                        return;
+                    }
                     proceedWithStart(call);
                 })
                 .exceptionally((throwable) -> {
+                    canceledPermissionStarts.remove(call);
                     call.reject("User denied location permission", "NOT_AUTHORIZED");
                     return null;
                 });
@@ -124,28 +143,27 @@ public class BackgroundGeolocation extends Plugin {
             .putExtra(BackgroundGeolocationService.EXTRA_NOTIFICATION_TITLE, backgroundTitle)
             .putExtra(BackgroundGeolocationService.EXTRA_NOTIFICATION_MESSAGE, backgroundMessage);
         CompletableFuture<BackgroundGeolocationService.LocalBinder> connectionFuture = getServiceConnection(startIntent);
-        connectionFuture
-            .thenAccept((serviceBinder) -> {
-                serviceBinder.start(
-                    call.getCallbackId(),
-                    backgroundTitle,
-                    backgroundMessage,
-                    call.getFloat("distanceFilter", 0f),
-                    call.getString("url", null),
-                    headersFromCall(call),
-                    longOptionFromCall(call, "minIntervalMs", 0L),
-                    call.getBoolean("networkFallback", false)
-                );
-            })
-            .exceptionally((throwable) -> {
-                if (serviceConnectionFuture == connectionFuture) {
-                    releaseServiceConnection();
-                    stopBackgroundService();
-                    serviceConnectionFuture = null;
-                }
-                rejectServiceStartFailure(call, throwable);
-                return null;
-            });
+        serviceStartedFuture = connectionFuture.thenAccept((serviceBinder) -> {
+            serviceBinder.start(
+                call.getCallbackId(),
+                backgroundTitle,
+                backgroundMessage,
+                call.getFloat("distanceFilter", 0f),
+                call.getString("url", null),
+                headersFromCall(call),
+                longOptionFromCall(call, "minIntervalMs", 0L),
+                call.getBoolean("networkFallback", false)
+            );
+        });
+        serviceStartedFuture.exceptionally((throwable) -> {
+            if (serviceConnectionFuture == connectionFuture) {
+                releaseServiceConnection();
+                stopBackgroundService();
+                serviceConnectionFuture = null;
+            }
+            rejectServiceStartFailure(call, throwable);
+            return null;
+        });
     }
 
     @PluginMethod
@@ -321,21 +339,71 @@ public class BackgroundGeolocation extends Plugin {
     @PluginMethod
     public void stop(PluginCall call) {
         if (serviceConnectionFuture == null) {
-            call.resolve();
-            return;
-        }
-        getServiceConnection()
-            .thenAccept((service) -> {
-                service.stop();
+            if (locationPermissionFuture != null && !locationPermissionFuture.isDone()) {
                 PluginCall savedCall = watchCall;
+                if (savedCall != null) {
+                    canceledPermissionStarts.add(savedCall);
+                }
                 watchCall = null;
                 if (savedCall != null) {
                     savedCall.setKeepAlive(false);
                 }
                 call.resolve();
-                serviceConnectionFuture = null;
+                return;
+            }
+            call.resolve();
+            return;
+        }
+        // Wait for an in-flight start() to reach the service before stopping it.
+        // Without this, a start() immediately followed by stop() can deliver the
+        // stop to the service before the start (CompletableFuture runs dependents
+        // in LIFO order), leaving tracking running after stop() resolved.
+        CompletableFuture<BackgroundGeolocationService.LocalBinder> connectionAtStop = serviceConnectionFuture;
+        PluginCall watchCallAtStop = watchCall;
+        CompletableFuture<Void> started = serviceStartedFuture;
+        CompletableFuture<BackgroundGeolocationService.LocalBinder> ready =
+            started == null
+                ? connectionAtStop
+                : started
+                      .handle((ignored, startError) -> null)
+                      .thenCompose((ignored) -> {
+                          if (
+                              connectionAtStop == null ||
+                              serviceConnectionFuture != connectionAtStop ||
+                              connectionAtStop.isCompletedExceptionally()
+                          ) {
+                              // Start failed and was already cleaned up; nothing to stop.
+                              return CompletableFuture.completedFuture(null);
+                          }
+                          return connectionAtStop;
+                      });
+        ready
+            .thenAccept((service) -> {
+                if (service != null && serviceConnectionFuture == connectionAtStop && serviceStartedFuture == started) {
+                    service.stop();
+                }
+                if (watchCall == watchCallAtStop) {
+                    watchCall = null;
+                    if (watchCallAtStop != null) {
+                        watchCallAtStop.setKeepAlive(false);
+                    }
+                }
+                call.resolve();
+                if (serviceConnectionFuture == connectionAtStop && serviceStartedFuture == started) {
+                    serviceConnectionFuture = null;
+                    serviceStartedFuture = null;
+                }
             })
             .exceptionally((throwable) -> {
+                // Never leave the plugin wedged: if `serviceConnectionFuture` stayed
+                // set here, every later start() would be rejected with
+                // ALREADY_STARTED until the app process died.
+                if (serviceConnectionFuture == connectionAtStop) {
+                    releaseServiceConnection();
+                    stopBackgroundService();
+                    serviceConnectionFuture = null;
+                    serviceStartedFuture = null;
+                }
                 call.reject("Service connection failed: " + throwable.getMessage());
                 return null;
             });
