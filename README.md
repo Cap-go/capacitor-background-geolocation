@@ -203,12 +203,15 @@ const pending = entries.findIndex((entry) => entry.status === "pending");
 const settled = pending === -1 ? entries : entries.slice(0, pending);
 if (settled.length > 0) {
     const failed = settled.filter((entry) => entry.status === "failed");
-    await fetch("https://api.example.com/locations/batch", {
+    const response = await fetch("https://api.example.com/locations/batch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(failed)
     });
-    await BackgroundGeolocation.clearLocationLog({ upToId: settled[settled.length - 1].id });
+    // Only clear what the server has accepted
+    if (response.ok) {
+        await BackgroundGeolocation.clearLocationLog({ upToId: settled[settled.length - 1].id });
+    }
 }
 ```
 
