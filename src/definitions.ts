@@ -151,7 +151,7 @@ export interface StartOptions {
    * Delivery is best-effort: there is no on-disk queue and no automatic retry.
    * Failed POSTs are logged and dropped. A flaky network can delay in-flight
    * requests, but points are not persisted across process death. Set
-   * {@link StartOptions.locationLog} to keep them on the device.
+   * {@link StartOptions.locationLog} to keep every location on the device.
    *
    * @since 8.2.0
    * @example "https://api.example.com/locations"
@@ -212,14 +212,13 @@ export interface StartOptions {
    */
   networkFallback?: boolean;
   /**
-   * Whether each location POSTed to {@link StartOptions.url} is also kept in a
-   * SQLite log on the device, with the outcome of its request. Ignored when
-   * `url` is not set.
+   * Whether every location is also added to a log file on the device.
    *
-   * The log is written from native code, so it keeps recording while the
+   * The file is written from native code, so it keeps recording while the
    * WebView is suspended, and it survives `stop()`, app restarts and reboots.
-   * Read it with {@link BackgroundGeolocationPlugin.getLocationLog}. The plugin
-   * doesn't retry a failed POST itself.
+   * It is left out of device backups.
+   * Read it with {@link BackgroundGeolocationPlugin.getLocationLog}, for
+   * example when the app returns to the foreground or the network is back.
    *
    * @since 8.5.0
    * @default false
@@ -227,8 +226,8 @@ export interface StartOptions {
    */
   locationLog?: boolean;
   /**
-   * How many locations the location log holds. Once it is full, the oldest
-   * ones are removed first.
+   * How many locations the location log holds. Once it is full, the older
+   * half is removed. A location takes about 200 bytes.
    *
    * @since 8.5.0
    * @default 100000
@@ -668,19 +667,7 @@ export interface UpdateHeadersOptions {
 }
 
 /**
- * Outcome of the native POST for a location log entry.
- *
- * An entry is `pending` until its request finishes. It is `sent` after a 2xx
- * response and `failed` after any other response or a network error. An entry
- * whose request was cut off with the app becomes `failed` the next time the
- * log is opened.
- *
- * @since 8.5.0
- */
-export type LocationLogStatus = 'pending' | 'sent' | 'failed';
-
-/**
- * A location recorded in the location log, with the outcome of its native POST.
+ * A location kept in the location log.
  *
  * @since 8.5.0
  */
@@ -688,33 +675,13 @@ export interface LocationLogEntry extends Location {
   /**
    * Identifier of the entry. Identifiers increase with every location and are
    * never reused, so the last one read works as a cursor for
-   * {@link GetLocationLogOptions.afterId}.
+   * {@link GetLocationLogOptions.afterId} and
+   * {@link ClearLocationLogOptions.upToId}.
    *
    * @since 8.5.0
    * @example 4211
    */
   id: number;
-  /**
-   * Outcome of the native POST.
-   *
-   * @since 8.5.0
-   * @example "failed"
-   */
-  status: LocationLogStatus;
-  /**
-   * HTTP status of the response, or null if no response was received.
-   *
-   * @since 8.5.0
-   * @example 200
-   */
-  httpStatus: number | null;
-  /**
-   * Description of the failure, or null if the POST did not fail.
-   *
-   * @since 8.5.0
-   * @example "Unable to resolve host \"api.example.com\""
-   */
-  error: string | null;
 }
 
 /**
@@ -731,16 +698,8 @@ export interface GetLocationLogOptions {
    */
   afterId?: number;
   /**
-   * Only return entries whose location `time` is at or after this time, in
-   * milliseconds since the unix epoch.
-   *
-   * @since 8.5.0
-   * @example 1640995200000
-   */
-  since?: number;
-  /**
-   * Maximum number of entries to return. Call again with `afterId` set to the
-   * last `id` received to read the next page.
+   * Maximum number of entries to return, up to 10000. Call again with
+   * `afterId` set to the last `id` received to read the next page.
    *
    * @since 8.5.0
    * @default 1000
@@ -952,8 +911,8 @@ export interface BackgroundGeolocationPlugin {
    * not tracking is running. Nothing is kept on the web, so the result is
    * empty there.
    *
-   * @param options Filters and paging for the entries to return
-   * @returns A promise with the matching entries, oldest first
+   * @param options Paging for the entries to return
+   * @returns A promise with the entries, oldest first
    *
    * @since 8.5.0
    * @example
@@ -963,7 +922,8 @@ export interface BackgroundGeolocationPlugin {
 
   /**
    * Removes entries from the location log, for example once they have been
-   * uploaded.
+   * read or uploaded. With `upToId` set to the last `id` that was read, a
+   * location that arrived in the meantime is kept.
    *
    * @param options Which entries to remove
    * @returns A promise that resolves when the entries are removed

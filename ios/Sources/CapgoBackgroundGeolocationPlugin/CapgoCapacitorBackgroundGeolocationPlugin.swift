@@ -132,10 +132,6 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             self.lastPostedLocationTime = nil
             self.locationLogEnabled = call.getBool("locationLog") ?? false
             self.locationLogMaxEntries = max(1, call.getInt("locationLogMaxEntries") ?? LocationLog.defaultMaxEntries)
-            if self.locationLogEnabled {
-                // Open the log now, so the first location does not open it on the main thread
-                DispatchQueue.global(qos: .utility).async { _ = LocationLog.shared }
-            }
             // Create fresh location manager and initialize date
             self.locationManager = CLLocationManager()
             guard let manager = self.locationManager else {
@@ -486,16 +482,17 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     }
 
     @objc func getLocationLog(_ call: CAPPluginCall) {
-        guard isWholeNumberOrAbsent(call, "afterId"), isWholeNumberOrAbsent(call, "since") else {
-            return call.reject("afterId and since must be numbers")
+        guard isWholeNumberOrAbsent(call, "afterId") else {
+            return call.reject("afterId must be a number")
         }
-        let afterId = call.getDouble("afterId").map { Int64($0.rounded()) }
-        let since = call.getDouble("since").map { Int64($0.rounded()) }
-        let limit = call.getInt("limit") ?? LocationLog.defaultLimit
+        let afterId = call.getDouble("afterId").map { Int64($0.rounded()) } ?? 0
+        let limit = min(LocationLog.maxLimit, max(1, call.getInt("limit") ?? LocationLog.defaultLimit))
         DispatchQueue.global(qos: .userInitiated).async {
-            call.resolve([
-                "entries": LocationLog.shared.entries(afterId: afterId, since: since, limit: limit)
-            ])
+            do {
+                call.resolve(["entries": try LocationLog.shared.entries(afterId: afterId, limit: limit)])
+            } catch {
+                call.reject("Could not read the location log", nil, error)
+            }
         }
     }
 
@@ -505,8 +502,12 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         }
         let upToId = call.getDouble("upToId").map { Int64($0.rounded()) }
         DispatchQueue.global(qos: .userInitiated).async {
-            LocationLog.shared.clear(upToId: upToId)
-            call.resolve()
+            do {
+                try LocationLog.shared.clear(upToId: upToId)
+                call.resolve()
+            } catch {
+                call.reject("Could not clear the location log", nil, error)
+            }
         }
     }
 
@@ -717,11 +718,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             return
         }
         lastPostedLocationTime = location.timestamp
-        let logId = locationLogEnabled ? LocationLog.shared.insert(data, maxEntries: locationLogMaxEntries) : nil
-        postJson(body, to: backendUrl, headers: locationHeaders, taskName: "CapgoLocationUpdate") { httpStatus, error in
-            guard let logId else { return }
-            LocationLog.shared.complete(id: logId, httpStatus: httpStatus, error: error)
-        }
+        postJson(body, to: backendUrl, headers: locationHeaders, taskName: "CapgoLocationUpdate")
     }
 
     private func stringHeaders(from object: [String: Any]?) -> [String: String] {
@@ -739,13 +736,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         return headers
     }
 
-    private func postJson(
-        _ body: Data,
-        to url: URL,
-        headers: [String: String],
-        taskName: String,
-        completion: ((Int?, Error?) -> Void)? = nil
-    ) {
+    private func postJson(_ body: Data, to url: URL, headers: [String: String], taskName: String) {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -762,8 +753,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
                 backgroundTask = .invalid
             }
         }
-        URLSession.shared.dataTask(with: request) { _, response, error in
-            completion?((response as? HTTPURLResponse)?.statusCode, error)
+        URLSession.shared.dataTask(with: request) { _, _, _ in
             if backgroundTask != .invalid {
                 UIApplication.shared.endBackgroundTask(backgroundTask)
                 backgroundTask = .invalid
@@ -929,6 +919,12 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
               let location = locations.last,
               isLocationValid(location) else {
             return
+        }
+
+        if locationLogEnabled {
+            var entry = locationPayload(location)
+            entry["source"] = nil
+            LocationLog.shared.append(entry, maxEntries: locationLogMaxEntries)
         }
 
         // Native delivery does not depend on the bridge, so it keeps working

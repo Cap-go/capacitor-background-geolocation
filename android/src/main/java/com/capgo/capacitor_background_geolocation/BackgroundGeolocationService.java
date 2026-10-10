@@ -59,6 +59,8 @@ public class BackgroundGeolocationService extends Service {
     private Runnable restartRunnable;
     private float currentDistanceFilter;
     private long currentMinIntervalMs;
+    private boolean locationLogEnabled;
+    private int locationLogMaxEntries = LocationLog.DEFAULT_MAX_ENTRIES;
     private PowerManager.WakeLock wakeLock;
 
     // How long a GPS fix is considered "fresh" before we allow a NETWORK_PROVIDER fix through.
@@ -140,13 +142,14 @@ public class BackgroundGeolocationService extends Service {
         }
         nativePostUrl = LocationStore.getUrl(context);
         promoteToForeground(LocationStore.getTitle(context), LocationStore.getMessage(context));
-        openLocationLog();
         if (client == null || locationCallback == null) {
             acquireWakeLock();
             client = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
             currentDistanceFilter = LocationStore.getDistanceFilter(context);
             currentMinIntervalMs = LocationStore.getMinIntervalMs(context);
             networkFallbackEnabled = LocationStore.getNetworkFallback(context);
+            locationLogEnabled = LocationStore.getLocationLog(context);
+            locationLogMaxEntries = LocationStore.getLocationLogMaxEntries(context);
             locationCallback = createLocationListener(this);
             lastGpsFixAtMs = SystemClock.elapsedRealtime();
             requestLocationUpdates();
@@ -266,6 +269,9 @@ public class BackgroundGeolocationService extends Service {
             }
         }
         startWatchdog();
+        if (locationLogEnabled) {
+            logLocation(location);
+        }
         if (nativePostUrl != null) {
             postLocationNatively(location);
         }
@@ -281,35 +287,36 @@ public class BackgroundGeolocationService extends Service {
     }
 
     // Delivers a location to the configured URL from native code, so it works
-    // even when the WebView/JavaScript layer no longer exists. The location is
-    // logged before it is queued, so it is kept while earlier POSTs still wait.
+    // even when the WebView/JavaScript layer no longer exists.
     private void postLocationNatively(android.location.Location location) {
         if (postExecutor == null) {
             postExecutor = Executors.newSingleThreadExecutor();
         }
         Context context = getApplicationContext();
         JSONObject payload = locationToJson(location);
-        long logId = LocationStore.logLocation(context, payload);
         postExecutor.execute(() -> {
             try {
-                LocationStore.sendLocation(context, payload, logId);
+                LocationStore.sendLocation(context, payload);
             } catch (Exception e) {
                 Logger.error("Native location POST failed", e);
             }
         });
     }
 
-    // Opens the location log on the POST thread, so the first location does not
-    // have to open it on the main thread.
-    private void openLocationLog() {
+    // Adds a location to the location log on the log's own thread, so a slow
+    // disk or a POST that hangs never holds it back.
+    private void logLocation(android.location.Location location) {
         Context context = getApplicationContext();
-        if (nativePostUrl == null || !LocationStore.getLocationLog(context)) {
-            return;
-        }
-        if (postExecutor == null) {
-            postExecutor = Executors.newSingleThreadExecutor();
-        }
-        postExecutor.execute(() -> LocationLog.getInstance(context).open());
+        JSONObject entry = locationToJson(location);
+        entry.remove("source");
+        int maxEntries = locationLogMaxEntries;
+        LocationLog.EXECUTOR.execute(() -> {
+            try {
+                LocationLog.getInstance(context).append(entry, maxEntries);
+            } catch (Exception e) {
+                Logger.error("Could not add the location to the location log", e);
+            }
+        });
     }
 
     private static JSONObject locationToJson(android.location.Location location) {
@@ -429,6 +436,8 @@ public class BackgroundGeolocationService extends Service {
             currentDistanceFilter = distanceFilter;
             currentMinIntervalMs = Math.max(0L, minIntervalMs);
             networkFallbackEnabled = networkFallback;
+            locationLogEnabled = locationLog;
+            BackgroundGeolocationService.this.locationLogMaxEntries = locationLogMaxEntries;
 
             nativePostUrl = url == null || url.isEmpty() ? null : url;
             LocationStore.saveSetup(
@@ -443,7 +452,6 @@ public class BackgroundGeolocationService extends Service {
                 locationLog,
                 locationLogMaxEntries
             );
-            openLocationLog();
 
             // The service may already be running (for example after a sticky
             // restart), so drop any previous listener before registering a new one.

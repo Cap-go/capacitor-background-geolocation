@@ -67,7 +67,7 @@ final class LocationStore {
                 .putLong(KEY_MIN_INTERVAL_MS, Math.max(0L, minIntervalMs))
                 .putBoolean(KEY_NETWORK_FALLBACK, networkFallback)
                 .putBoolean(KEY_LOCATION_LOG, locationLog)
-                .putInt(KEY_LOCATION_LOG_MAX_ENTRIES, Math.max(1, locationLogMaxEntries))
+                .putInt(KEY_LOCATION_LOG_MAX_ENTRIES, locationLogMaxEntries)
                 .remove(KEY_LAST_POST_TIME);
         }
         editor.apply();
@@ -143,31 +143,17 @@ final class LocationStore {
         prefs(context).edit().putLong(KEY_LAST_POST_TIME, locationTimeMs).apply();
     }
 
-    // Adds a location to the location log as pending, when the log is on and a
-    // url is set. Returns its identifier, or -1 if it was not added.
-    static long logLocation(Context context, JSONObject data) {
-        String url = getUrl(context);
-        if (url == null || url.isEmpty() || !getLocationLog(context)) {
-            return -1;
-        }
-        return LocationLog.getInstance(context).insert(data, getLocationLogMaxEntries(context));
-    }
-
     // POSTs a single location as JSON to the configured url. Runs synchronously,
-    // so callers must invoke it off the main thread. logId is the location's
-    // entry in the location log, or -1, and gets the outcome of the request.
-    static void sendLocation(Context context, JSONObject data, long logId) throws IOException {
+    // so callers must invoke it off the main thread.
+    static void sendLocation(Context context, JSONObject data) throws IOException {
         String urlString = getUrl(context);
         if (urlString == null || urlString.isEmpty()) {
             return;
         }
-        LocationLog log = LocationLog.getInstance(context);
         long locationTimeMs = data.optLong("time", System.currentTimeMillis());
         if (!shouldPost(context, locationTimeMs)) {
-            log.remove(logId);
             return;
         }
-        Integer responseCode = null;
         HttpURLConnection connection = null;
         try {
             URL url = new URL(urlString);
@@ -186,16 +172,12 @@ final class LocationStore {
             try (OutputStream outputStream = connection.getOutputStream()) {
                 outputStream.write(body);
             }
-            responseCode = connection.getResponseCode();
+            int responseCode = connection.getResponseCode();
             Logger.debug("Location POST finished with response code: " + responseCode);
             if (responseCode < HttpURLConnection.HTTP_OK || responseCode >= HttpURLConnection.HTTP_MULT_CHOICE) {
                 throw new IOException("Location POST failed with response code: " + responseCode);
             }
             markPosted(context, locationTimeMs);
-            log.update(logId, LocationLog.STATUS_SENT, responseCode, null);
-        } catch (IOException | RuntimeException exception) {
-            log.update(logId, LocationLog.STATUS_FAILED, responseCode, exception.getMessage());
-            throw exception;
         } finally {
             if (connection != null) {
                 connection.disconnect();

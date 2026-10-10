@@ -41,10 +41,6 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executor;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -72,9 +68,6 @@ public class BackgroundGeolocation extends Plugin {
         Collections.newSetFromMap(new IdentityHashMap<PluginCall, Boolean>())
     );
     private PluginCall watchCall;
-    // Reads and clears the location log one call at a time, off the plugin thread.
-    // Its thread ends when idle, so there is nothing to shut down.
-    private final Executor locationLogExecutor = new ThreadPoolExecutor(0, 1, 30, TimeUnit.SECONDS, new LinkedBlockingQueue<>());
 
     private void fetchLastLocation(PluginCall call) {
         try {
@@ -161,7 +154,7 @@ public class BackgroundGeolocation extends Plugin {
                 longOptionFromCall(call, "minIntervalMs", 0L),
                 call.getBoolean("networkFallback", false),
                 call.getBoolean("locationLog", false),
-                call.getInt("locationLogMaxEntries", LocationLog.DEFAULT_MAX_ENTRIES)
+                Math.max(1, call.getInt("locationLogMaxEntries", LocationLog.DEFAULT_MAX_ENTRIES))
             );
         });
         serviceStartedFuture.exceptionally((throwable) -> {
@@ -621,18 +614,21 @@ public class BackgroundGeolocation extends Plugin {
 
     @PluginMethod
     public void getLocationLog(PluginCall call) {
-        if (!isNumberOrAbsent(call, "afterId") || !isNumberOrAbsent(call, "since")) {
-            call.reject("afterId and since must be numbers");
+        if (!isNumberOrAbsent(call, "afterId")) {
+            call.reject("afterId must be a number");
             return;
         }
         Context context = getContext();
-        Long afterId = nullableLongFromCall(call, "afterId");
-        Long since = nullableLongFromCall(call, "since");
-        int limit = call.getInt("limit", LocationLog.DEFAULT_LIMIT);
-        locationLogExecutor.execute(() -> {
-            JSObject result = new JSObject();
-            result.put("entries", LocationLog.getInstance(context).query(afterId, since, limit));
-            call.resolve(result);
+        long afterId = longOptionFromCall(call, "afterId", 0L);
+        int limit = Math.min(LocationLog.MAX_LIMIT, Math.max(1, call.getInt("limit", LocationLog.DEFAULT_LIMIT)));
+        LocationLog.EXECUTOR.execute(() -> {
+            try {
+                JSObject result = new JSObject();
+                result.put("entries", LocationLog.getInstance(context).read(afterId, limit));
+                call.resolve(result);
+            } catch (Exception exception) {
+                call.reject("Could not read the location log", exception);
+            }
         });
     }
 
@@ -643,10 +639,14 @@ public class BackgroundGeolocation extends Plugin {
             return;
         }
         Context context = getContext();
-        Long upToId = nullableLongFromCall(call, "upToId");
-        locationLogExecutor.execute(() -> {
-            LocationLog.getInstance(context).clear(upToId);
-            call.resolve();
+        Long upToId = call.getData().has("upToId") ? call.getData().optLong("upToId") : null;
+        LocationLog.EXECUTOR.execute(() -> {
+            try {
+                LocationLog.getInstance(context).clear(upToId);
+                call.resolve();
+            } catch (Exception exception) {
+                call.reject("Could not clear the location log", exception);
+            }
         });
     }
 
@@ -765,10 +765,6 @@ public class BackgroundGeolocation extends Plugin {
     // fit in 32 bits cross the bridge as Integer, so optLong is required (issue #62).
     static long longOptionFromCall(PluginCall call, String key, long defaultValue) {
         return call.getData().optLong(key, defaultValue);
-    }
-
-    private static Long nullableLongFromCall(PluginCall call, String key) {
-        return call.getData().isNull(key) ? null : call.getData().optLong(key);
     }
 
     static boolean isNumberOrAbsent(PluginCall call, String key) {

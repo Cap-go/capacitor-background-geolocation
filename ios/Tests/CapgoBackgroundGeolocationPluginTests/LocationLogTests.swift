@@ -3,11 +3,13 @@ import XCTest
 
 class LocationLogTests: XCTestCase {
 
-    private let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).sqlite")
+    private let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent(UUID().uuidString)
+        .appendingPathComponent("location_log.txt")
     private lazy var log = LocationLog(url: url)
 
     override func tearDown() {
-        try? FileManager.default.removeItem(at: url)
+        try? FileManager.default.removeItem(at: url.deletingLastPathComponent())
         super.tearDown()
     }
 
@@ -21,21 +23,31 @@ class LocationLogTests: XCTestCase {
             "simulated": false,
             "speed": NSNull(),
             "bearing": 270.0,
-            "time": NSNumber(value: time),
-            "source": "native"
+            "time": NSNumber(value: time)
         ]
     }
 
-    private func ids(_ entries: [[String: Any]]) -> [Int64] {
-        entries.compactMap { $0["id"] as? Int64 }
+    private func appendLocations(_ count: Int, maxEntries: Int) {
+        for index in 1...count {
+            log.append(location(time: Int64(1000 * index)), maxEntries: maxEntries)
+        }
     }
 
-    func testInsertAddsPendingEntry() {
-        let id = log.insert(location(time: 1_700_000_000_000), maxEntries: 3)
+    private func ids(afterId: Int64 = 0, limit: Int = 10) throws -> [Int64] {
+        try log.entries(afterId: afterId, limit: limit).compactMap { $0["id"] as? Int64 }
+    }
 
-        let entries = log.entries(afterId: nil, since: nil, limit: 10)
+    func testEntriesReturnsNothingBeforeALocationWasAdded() throws {
+        XCTAssertEqual(try ids(), [])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
+    }
+
+    func testEntriesReturnsTheLocationWithItsIdentifier() throws {
+        log.append(location(time: 1_700_000_000_000), maxEntries: 10)
+
+        let entries = try log.entries(afterId: 0, limit: 10)
         XCTAssertEqual(entries.count, 1)
-        XCTAssertEqual(entries[0]["id"] as? Int64, id)
+        XCTAssertEqual(entries[0]["id"] as? Int64, 1)
         XCTAssertEqual(entries[0]["latitude"] as? Double, 39.7392)
         XCTAssertEqual(entries[0]["longitude"] as? Double, -104.9903)
         XCTAssertEqual(entries[0]["accuracy"] as? Double, 5.0)
@@ -45,98 +57,159 @@ class LocationLogTests: XCTestCase {
         XCTAssertTrue(entries[0]["speed"] is NSNull)
         XCTAssertEqual(entries[0]["bearing"] as? Double, 270.0)
         XCTAssertEqual(entries[0]["time"] as? Int64, 1_700_000_000_000)
-        XCTAssertEqual(entries[0]["status"] as? String, "pending")
-        XCTAssertTrue(entries[0]["httpStatus"] is NSNull)
-        XCTAssertTrue(entries[0]["error"] is NSNull)
     }
 
-    func testCompleteRecordsSentEntry() throws {
-        let id = try XCTUnwrap(log.insert(location(time: 1000), maxEntries: 3))
+    func testALineHasItsKeysInAlphabeticalOrder() throws {
+        log.append(location(time: 1000), maxEntries: 10)
+        XCTAssertEqual(try ids(), [1])
 
-        log.complete(id: id, httpStatus: 200, error: nil)
-
-        let entry = log.entries(afterId: nil, since: nil, limit: 10)[0]
-        XCTAssertEqual(entry["status"] as? String, "sent")
-        XCTAssertEqual(entry["httpStatus"] as? Int64, 200)
-        XCTAssertTrue(entry["error"] is NSNull)
+        let line = try String(contentsOf: url, encoding: .utf8)
+        let keys = line.components(separatedBy: "\"").enumerated().filter { $0.offset % 2 == 1 }.map(\.element)
+        XCTAssertEqual(keys.count, 9)
+        XCTAssertEqual(keys, keys.sorted())
     }
 
-    func testCompleteRecordsFailedEntryForErrorResponse() throws {
-        let id = try XCTUnwrap(log.insert(location(time: 1000), maxEntries: 3))
+    func testTheLogIsLeftOutOfBackups() throws {
+        log.append(location(time: 1000), maxEntries: 10)
+        XCTAssertEqual(try ids(), [1])
 
-        log.complete(id: id, httpStatus: 401, error: nil)
-
-        let entry = log.entries(afterId: nil, since: nil, limit: 10)[0]
-        XCTAssertEqual(entry["status"] as? String, "failed")
-        XCTAssertEqual(entry["httpStatus"] as? Int64, 401)
-        XCTAssertEqual(entry["error"] as? String, "Location POST failed with response code: 401")
+        let directory = url.deletingLastPathComponent()
+        XCTAssertEqual(try directory.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
     }
 
-    func testCompleteRecordsFailedEntryForNetworkError() throws {
-        let id = try XCTUnwrap(log.insert(location(time: 1000), maxEntries: 3))
+    func testEntriesReturnsEntriesAfterAfterIdOldestFirst() throws {
+        appendLocations(3, maxEntries: 10)
 
-        log.complete(id: id, httpStatus: nil, error: URLError(.notConnectedToInternet))
-
-        let entry = log.entries(afterId: nil, since: nil, limit: 10)[0]
-        XCTAssertEqual(entry["status"] as? String, "failed")
-        XCTAssertTrue(entry["httpStatus"] is NSNull)
-        XCTAssertNotNil(entry["error"] as? String)
+        XCTAssertEqual(try ids(), [1, 2, 3])
+        XCTAssertEqual(try ids(afterId: 1), [2, 3])
+        XCTAssertEqual(try ids(afterId: 3), [])
     }
 
-    func testEntriesFiltersAndPages() throws {
-        let first = try XCTUnwrap(log.insert(location(time: 1000), maxEntries: 3))
-        let second = try XCTUnwrap(log.insert(location(time: 2000), maxEntries: 3))
-        let third = try XCTUnwrap(log.insert(location(time: 3000), maxEntries: 3))
+    func testEntriesStopsAtLimit() throws {
+        appendLocations(3, maxEntries: 10)
 
-        XCTAssertEqual(ids(log.entries(afterId: nil, since: nil, limit: 10)), [first, second, third])
-        XCTAssertEqual(ids(log.entries(afterId: first, since: nil, limit: 10)), [second, third])
-        XCTAssertEqual(ids(log.entries(afterId: nil, since: 2000, limit: 10)), [second, third])
-        XCTAssertEqual(ids(log.entries(afterId: nil, since: nil, limit: 2)), [first, second])
-        XCTAssertEqual(ids(log.entries(afterId: second, since: nil, limit: 2)), [third])
+        XCTAssertEqual(try ids(limit: 2), [1, 2])
+        XCTAssertEqual(try ids(afterId: 2, limit: 2), [3])
     }
 
-    func testInsertRemovesOldestEntriesBeyondMaxEntries() throws {
-        _ = log.insert(location(time: 1000), maxEntries: 3)
-        let second = try XCTUnwrap(log.insert(location(time: 2000), maxEntries: 3))
-        let third = try XCTUnwrap(log.insert(location(time: 3000), maxEntries: 3))
-        let fourth = try XCTUnwrap(log.insert(location(time: 4000), maxEntries: 3))
+    func testClearKeepsALocationAddedAfterTheRead() throws {
+        appendLocations(2, maxEntries: 10)
+        let read = try ids()
+        appendLocations(1, maxEntries: 10)
 
-        XCTAssertEqual(ids(log.entries(afterId: nil, since: nil, limit: 10)), [second, third, fourth])
+        try log.clear(upToId: read.last)
+
+        XCTAssertEqual(try ids(), [3])
     }
 
-    func testClearRemovesEntriesUpToIdentifier() throws {
-        let first = try XCTUnwrap(log.insert(location(time: 1000), maxEntries: 3))
-        let second = try XCTUnwrap(log.insert(location(time: 2000), maxEntries: 3))
+    func testClearWithoutUpToIdRemovesEveryEntry() throws {
+        appendLocations(3, maxEntries: 10)
 
-        log.clear(upToId: first)
+        try log.clear(upToId: nil)
 
-        XCTAssertEqual(ids(log.entries(afterId: nil, since: nil, limit: 10)), [second])
+        XCTAssertEqual(try ids(), [])
     }
 
-    func testIdentifiersAreNotReusedAfterClear() throws {
-        let first = try XCTUnwrap(log.insert(location(time: 1000), maxEntries: 3))
+    func testClearWithUpToIdPastTheLastEntryRemovesEveryEntry() throws {
+        appendLocations(2, maxEntries: 10)
 
-        log.clear(upToId: nil)
+        try log.clear(upToId: 100)
+        appendLocations(1, maxEntries: 10)
 
-        XCTAssertTrue(log.entries(afterId: nil, since: nil, limit: 10).isEmpty)
-        XCTAssertGreaterThan(try XCTUnwrap(log.insert(location(time: 2000), maxEntries: 3)), first)
+        XCTAssertEqual(try ids(), [3])
     }
 
-    func testReopeningMarksPendingEntriesFailed() throws {
-        _ = log.insert(location(time: 1000), maxEntries: 3)
+    func testAClearThatFailsLeavesTheLogAsItWas() throws {
+        appendLocations(3, maxEntries: 10)
+        XCTAssertEqual(try ids(), [1, 2, 3])
+        let inTheWay = url.appendingPathExtension("tmp").appendingPathComponent("child")
+        try FileManager.default.createDirectory(at: inTheWay, withIntermediateDirectories: true)
+
+        XCTAssertThrowsError(try log.clear(upToId: 1))
+
+        XCTAssertEqual(try ids(), [1, 2, 3])
+    }
+
+    func testIdentifiersAreNotReusedAfterTheLogWasCleared() throws {
+        appendLocations(2, maxEntries: 10)
+        XCTAssertEqual(try ids(), [1, 2])
 
         log = LocationLog(url: url)
+        try log.clear(upToId: nil)
+        log = LocationLog(url: url)
+        appendLocations(1, maxEntries: 10)
 
-        let entry = log.entries(afterId: nil, since: nil, limit: 10)[0]
-        XCTAssertEqual(entry["status"] as? String, "failed")
-        XCTAssertEqual(entry["error"] as? String, "The app stopped before the request finished")
+        XCTAssertEqual(try ids(), [3])
     }
 
-    func testEntriesSurviveReopeningTheDatabase() throws {
-        let id = try XCTUnwrap(log.insert(location(time: 1000), maxEntries: 3))
+    func testALogWhoseFileWasRemovedKeepsCounting() throws {
+        appendLocations(2, maxEntries: 10)
+        XCTAssertEqual(try ids(), [1, 2])
+        try FileManager.default.removeItem(at: url)
+
+        appendLocations(1, maxEntries: 10)
+
+        XCTAssertEqual(try ids(), [3])
+    }
+
+    func testALogThatIsOpenedAgainKeepsItsEntries() throws {
+        appendLocations(2, maxEntries: 10)
+        XCTAssertEqual(try ids(), [1, 2])
 
         log = LocationLog(url: url)
+        appendLocations(1, maxEntries: 10)
 
-        XCTAssertEqual(ids(log.entries(afterId: nil, since: nil, limit: 10)), [id])
+        XCTAssertEqual(try ids(), [1, 2, 3])
+    }
+
+    func testAppendRemovesTheOlderHalfOnceTheLogIsFull() throws {
+        appendLocations(4, maxEntries: 4)
+        XCTAssertEqual(try ids(), [1, 2, 3, 4])
+
+        appendLocations(1, maxEntries: 4)
+
+        XCTAssertEqual(try ids(), [3, 4, 5])
+    }
+
+    func testALogThatIsOpenedAgainRemovesTheOlderHalfAtTheSameSize() throws {
+        appendLocations(3, maxEntries: 4)
+        XCTAssertEqual(try ids(), [1, 2, 3])
+
+        log = LocationLog(url: url)
+        appendLocations(1, maxEntries: 4)
+        XCTAssertEqual(try ids(), [1, 2, 3, 4])
+
+        appendLocations(1, maxEntries: 4)
+
+        XCTAssertEqual(try ids(), [3, 4, 5])
+    }
+
+    private func cutOffALine() throws {
+        XCTAssertEqual(try ids(), [1])
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.seekToEnd()
+        try handle.write(contentsOf: Data("\n2 {\"latitude\":39.7".utf8))
+        try handle.close()
+    }
+
+    func testALineThatWasCutOffDoesNotRunIntoTheNext() throws {
+        appendLocations(1, maxEntries: 10)
+        try cutOffALine()
+
+        log.append(location(time: 2000), maxEntries: 10)
+
+        let entries = try log.entries(afterId: 0, limit: 10)
+        XCTAssertEqual(entries.compactMap { $0["id"] as? Int64 }, [1, 2])
+        XCTAssertEqual(entries.last?["time"] as? Int64, 2000)
+    }
+
+    func testALineThatWasCutOffKeepsItsIdentifier() throws {
+        appendLocations(1, maxEntries: 10)
+        try cutOffALine()
+
+        log = LocationLog(url: url)
+        appendLocations(1, maxEntries: 10)
+
+        XCTAssertEqual(try ids(), [1, 3])
     }
 }

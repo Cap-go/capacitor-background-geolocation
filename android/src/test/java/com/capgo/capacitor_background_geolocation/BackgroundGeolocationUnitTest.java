@@ -241,7 +241,7 @@ public class BackgroundGeolocationUnitTest {
         PluginCall call = new PluginCall(null, "BackgroundGeolocation", "test-callback", "getLocationLog", data);
 
         assertTrue(BackgroundGeolocation.isNumberOrAbsent(call, "afterId"));
-        assertTrue(BackgroundGeolocation.isNumberOrAbsent(call, "since"));
+        assertTrue(BackgroundGeolocation.isNumberOrAbsent(call, "upToId"));
     }
 
     @Test
