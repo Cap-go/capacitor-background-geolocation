@@ -31,7 +31,7 @@ final class LocationLog {
     }
 
     // Adds a location without waiting for the file. Once the log holds
-    // maxEntries, the older half is removed first.
+    // maxEntries, the oldest tenth is removed first.
     func append(_ location: [String: Any], maxEntries: Int) {
         queue.async {
             do {
@@ -74,7 +74,7 @@ final class LocationLog {
         if count >= maxEntries {
             // Counted again from here, so a removal that fails is not tried again for every location.
             count = 0
-            try rewrite(upToId: lastId - Int64(maxEntries / 2))
+            try rewrite(upToId: lastId - Int64(maxEntries - max(1, maxEntries / 10)))
         }
         lastId += 1
         // A line starts with its line break, so one that was cut off never runs into the next.

@@ -48,13 +48,13 @@ final class LocationLog {
         this.file = file;
     }
 
-    // Adds a location. Once the log holds maxEntries, the older half is removed first.
+    // Adds a location. Once the log holds maxEntries, the oldest tenth is removed first.
     synchronized void append(JSONObject location, int maxEntries) throws IOException {
         load();
         if (count >= maxEntries) {
             // Counted again from here, so a removal that fails is not tried again for every location.
             count = 0;
-            rewrite(lastId - maxEntries / 2);
+            rewrite(lastId - maxEntries + Math.max(1, maxEntries / 10));
         }
         lastId++;
         // A line starts with its line break, so one that was cut off never runs into the next.

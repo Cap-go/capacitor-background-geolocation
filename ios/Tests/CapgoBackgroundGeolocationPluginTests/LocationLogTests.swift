@@ -112,17 +112,17 @@ class LocationLogTests: XCTestCase {
         XCTAssertEqual(try ids(), [3])
     }
 
-    func testALogThatIsOpenedAgainRemovesTheOlderHalfAtTheSameSize() throws {
-        appendLocations(3, maxEntries: 4)
-        XCTAssertEqual(try ids(), [1, 2, 3])
+    func testALogThatIsOpenedAgainRemovesTheOldestTenthAtTheSameSize() throws {
+        appendLocations(19, maxEntries: 20)
+        XCTAssertEqual(try ids(limit: 30), Array(1...19))
 
         log = LocationLog(url: url)
-        appendLocations(1, maxEntries: 4)
-        XCTAssertEqual(try ids(), [1, 2, 3, 4])
+        appendLocations(1, maxEntries: 20)
+        XCTAssertEqual(try ids(limit: 30), Array(1...20))
 
-        appendLocations(1, maxEntries: 4)
+        appendLocations(1, maxEntries: 20)
 
-        XCTAssertEqual(try ids(), [3, 4, 5])
+        XCTAssertEqual(try ids(limit: 30), Array(3...21))
     }
 
     func testALineThatWasCutOffDoesNotRunIntoTheNext() throws {

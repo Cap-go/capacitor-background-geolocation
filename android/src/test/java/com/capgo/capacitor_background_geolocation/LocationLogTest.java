@@ -118,16 +118,19 @@ public class LocationLogTest {
     }
 
     @Test
-    public void testALogThatIsOpenedAgainRemovesTheOlderHalfAtTheSameSize() throws Exception {
-        appendLocations(3, 4);
+    public void testALogThatIsOpenedAgainRemovesTheOldestTenthAtTheSameSize() throws Exception {
+        appendLocations(19, 20);
 
         log = new LocationLog(file);
-        appendLocations(1, 4);
-        assertArrayEquals(new long[] { 1, 2, 3, 4 }, ids(log.read(0, 10)));
+        appendLocations(1, 20);
+        assertEquals(20, log.read(0, 30).length());
 
-        appendLocations(1, 4);
+        appendLocations(1, 20);
 
-        assertArrayEquals(new long[] { 3, 4, 5 }, ids(log.read(0, 10)));
+        long[] kept = ids(log.read(0, 30));
+        assertEquals(19, kept.length);
+        assertEquals(3, kept[0]);
+        assertEquals(21, kept[18]);
     }
 
     @Test

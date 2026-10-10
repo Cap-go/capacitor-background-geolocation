@@ -228,8 +228,8 @@ export interface StartOptions {
    */
   locationLog?: boolean;
   /**
-   * How many locations the location log holds. Once it is full, the older
-   * half is removed. A location takes about 200 bytes.
+   * How many locations the location log holds. Once it is full, the oldest
+   * tenth is removed. A location takes about 200 bytes.
    *
    * @since 8.5.0
    * @default 100000
