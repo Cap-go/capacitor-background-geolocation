@@ -118,6 +118,19 @@ public class LocationLogTest {
     }
 
     @Test
+    public void testAnAppendThatFailsDoesNotUseAnIdentifier() throws Exception {
+        appendLocations(1, 10);
+        assertTrue(file.delete());
+        assertTrue(file.mkdir());
+
+        assertThrows(IOException.class, () -> log.append(location(2000), 10));
+        assertTrue(file.delete());
+        appendLocations(1, 10);
+
+        assertArrayEquals(new long[] { 2 }, ids(log.read(0, 10)));
+    }
+
+    @Test
     public void testALogThatIsOpenedAgainRemovesTheOldestTenthAtTheSameSize() throws Exception {
         appendLocations(19, 20);
 

@@ -76,9 +76,8 @@ final class LocationLog {
             count = 0
             try rewrite(upToId: lastId - Int64(maxEntries - max(1, maxEntries / 10)))
         }
-        lastId += 1
         // A line starts with its line break, so one that was cut off never runs into the next.
-        var line = Data("\n\(lastId) ".utf8)
+        var line = Data("\n\(lastId + 1) ".utf8)
         line.append(try JSONSerialization.data(withJSONObject: location, options: .sortedKeys))
         if !FileManager.default.fileExists(atPath: url.path) {
             var directory = url.deletingLastPathComponent()
@@ -93,8 +92,10 @@ final class LocationLog {
         defer { try? handle.close() }
         try handle.seekToEnd()
         try handle.write(contentsOf: line)
-        try handle.synchronize()
+        // Counted once the line is written, so an append that fails leaves no hole in the identifiers.
+        lastId += 1
         count += 1
+        try handle.synchronize()
     }
 
     // Reads the last identifier and the number of entries, once.

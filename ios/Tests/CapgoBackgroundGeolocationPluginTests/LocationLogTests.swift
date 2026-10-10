@@ -112,6 +112,20 @@ class LocationLogTests: XCTestCase {
         XCTAssertEqual(try ids(), [3])
     }
 
+    func testAnAppendThatFailsDoesNotUseAnIdentifier() throws {
+        appendLocations(1, maxEntries: 10)
+        XCTAssertEqual(try ids(), [1])
+        try FileManager.default.removeItem(at: url)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
+
+        log.append(location(time: 2000), maxEntries: 10)
+        XCTAssertThrowsError(try ids())
+        try FileManager.default.removeItem(at: url)
+        appendLocations(1, maxEntries: 10)
+
+        XCTAssertEqual(try ids(), [2])
+    }
+
     func testALogThatIsOpenedAgainRemovesTheOldestTenthAtTheSameSize() throws {
         appendLocations(19, maxEntries: 20)
         XCTAssertEqual(try ids(limit: 30), Array(1...19))

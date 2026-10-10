@@ -56,13 +56,14 @@ final class LocationLog {
             count = 0;
             rewrite(lastId - maxEntries + Math.max(1, maxEntries / 10));
         }
-        lastId++;
         // A line starts with its line break, so one that was cut off never runs into the next.
         try (FileOutputStream output = new FileOutputStream(file, true)) {
-            output.write(("\n" + lastId + " " + location).getBytes(StandardCharsets.UTF_8));
+            output.write(("\n" + (lastId + 1) + " " + location).getBytes(StandardCharsets.UTF_8));
+            // Counted once the line is written, so an append that fails leaves no hole in the identifiers.
+            lastId++;
+            count++;
             output.getFD().sync();
         }
-        count++;
     }
 
     // Returns up to limit entries with an identifier above afterId, oldest first.
