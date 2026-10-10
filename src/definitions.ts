@@ -150,7 +150,8 @@ export interface StartOptions {
    *
    * Delivery is best-effort: there is no on-disk queue and no automatic retry.
    * Failed POSTs are logged and dropped. A flaky network can delay in-flight
-   * requests, but points are not persisted across process death.
+   * requests, but points are not persisted across process death. Set
+   * {@link StartOptions.locationLog} to keep every location on the device.
    *
    * @since 8.2.0
    * @example "https://api.example.com/locations"
@@ -210,6 +211,31 @@ export interface StartOptions {
    * networkFallback: true
    */
   networkFallback?: boolean;
+  /**
+   * Whether every location is also added to a log file on the device.
+   *
+   * The file is written from native code, so it keeps recording while the
+   * WebView is suspended, and it survives `stop()`, app restarts and reboots.
+   * It is left out of device backups. Read it with
+   * {@link BackgroundGeolocationPlugin.getLocationLog}.
+   *
+   * Tracking, and the log with it, ends when the app is closed, except on
+   * Android with {@link StartOptions.url} set.
+   *
+   * @since 8.5.0
+   * @default false
+   * @example true
+   */
+  locationLog?: boolean;
+  /**
+   * How many locations the location log holds. Once it is full, the oldest
+   * tenth is removed. A location takes about 200 bytes.
+   *
+   * @since 8.5.0
+   * @default 100000
+   * @example 500000
+   */
+  locationLogMaxEntries?: number;
 }
 
 /**
@@ -643,6 +669,78 @@ export interface UpdateHeadersOptions {
 }
 
 /**
+ * A location kept in the location log.
+ *
+ * @since 8.5.0
+ */
+export interface LocationLogEntry extends Location {
+  /**
+   * Identifier of the entry. Identifiers increase with every location and are
+   * never reused, so the last one read works as a cursor for
+   * {@link GetLocationLogOptions.afterId} and
+   * {@link ClearLocationLogOptions.upToId}.
+   *
+   * @since 8.5.0
+   * @example 4211
+   */
+  id: number;
+}
+
+/**
+ * Options for {@link BackgroundGeolocationPlugin.getLocationLog}.
+ *
+ * @since 8.5.0
+ */
+export interface GetLocationLogOptions {
+  /**
+   * Only return entries with an `id` greater than this one.
+   *
+   * @since 8.5.0
+   * @example 4211
+   */
+  afterId?: number;
+  /**
+   * Maximum number of entries to return, up to 10000. Call again with
+   * `afterId` set to the last `id` received to read the next page.
+   *
+   * @since 8.5.0
+   * @default 1000
+   * @example 500
+   */
+  limit?: number;
+}
+
+/**
+ * Result returned by {@link BackgroundGeolocationPlugin.getLocationLog}.
+ *
+ * @since 8.5.0
+ */
+export interface LocationLogResult {
+  /**
+   * The entries, oldest first.
+   *
+   * @since 8.5.0
+   */
+  entries: LocationLogEntry[];
+}
+
+/**
+ * Options for {@link BackgroundGeolocationPlugin.clearLocationLog}.
+ *
+ * @since 8.5.0
+ */
+export interface ClearLocationLogOptions {
+  /**
+   * Only remove entries with an `id` up to and including this one. Every entry
+   * is removed when it is not set.
+   *
+   * @since 8.5.0
+   * @example 4211
+   */
+  upToId?: number;
+}
+
+/**
  * Main plugin interface for background geolocation functionality.
  * Provides methods to manage location updates and access device settings.
  *
@@ -809,6 +907,33 @@ export interface BackgroundGeolocationPlugin {
    * const { regions } = await BackgroundGeolocation.getMonitoredGeofences();
    */
   getMonitoredGeofences(): Promise<MonitoredGeofencesResult>;
+
+  /**
+   * Reads the locations kept by {@link StartOptions.locationLog}, whether or
+   * not tracking is running. Nothing is kept on the web, so the result is
+   * empty there.
+   *
+   * @param options Paging for the entries to return
+   * @returns A promise with the entries, oldest first
+   *
+   * @since 8.5.0
+   * @example
+   * const { entries } = await BackgroundGeolocation.getLocationLog({ afterId: 4211 });
+   */
+  getLocationLog(options?: GetLocationLogOptions): Promise<LocationLogResult>;
+
+  /**
+   * Removes entries from the location log, for example once they have been
+   * read or uploaded.
+   *
+   * @param options Which entries to remove
+   * @returns A promise that resolves when the entries are removed
+   *
+   * @since 8.5.0
+   * @example
+   * await BackgroundGeolocation.clearLocationLog({ upToId: 4211 });
+   */
+  clearLocationLog(options?: ClearLocationLogOptions): Promise<void>;
 
   /**
    * Listens for geofence enter/exit transitions while the WebView is alive.

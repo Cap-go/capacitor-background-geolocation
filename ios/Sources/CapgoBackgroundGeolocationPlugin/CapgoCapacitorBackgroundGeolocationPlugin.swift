@@ -51,6 +51,8 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         CAPPluginMethod(name: "removeGeofence", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "removeAllGeofences", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getMonitoredGeofences", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getLocationLog", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearLocationLog", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "checkPermissions", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestPermissions", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "updateHeaders", returnType: CAPPluginReturnPromise),
@@ -84,6 +86,8 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     private var geofenceHeaders: [String: String] = [:]
     private var minIntervalMs: Double = 0
     private var lastPostedLocationTime: Date?
+    private var locationLogEnabled: Bool = false
+    private var locationLogMaxEntries: Int = LocationLog.defaultMaxEntries
 
     private let geofenceUrlKey = "CapgoBackgroundGeolocation.geofence.url"
     private let geofenceHeadersKey = "CapgoBackgroundGeolocation.geofence.headers"
@@ -126,6 +130,8 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             self.locationHeaders = self.stringHeaders(from: call.getObject("headers"))
             self.minIntervalMs = max(0, call.getDouble("minIntervalMs") ?? 0)
             self.lastPostedLocationTime = nil
+            self.locationLogEnabled = call.getBool("locationLog") ?? false
+            self.locationLogMaxEntries = max(1, call.getInt("locationLogMaxEntries") ?? LocationLog.defaultMaxEntries)
             // Create fresh location manager and initialize date
             self.locationManager = CLLocationManager()
             guard let manager = self.locationManager else {
@@ -472,6 +478,42 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             }.sorted()
             call.resolve(["regions": regions])
         }
+    }
+
+    @objc func getLocationLog(_ call: CAPPluginCall) {
+        guard isWholeNumberOrAbsent(call, "afterId") else {
+            return call.reject("afterId must be a number")
+        }
+        let afterId = call.getDouble("afterId").map { Int64($0.rounded()) } ?? 0
+        let limit = min(LocationLog.maxLimit, max(1, call.getInt("limit") ?? LocationLog.defaultLimit))
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                call.resolve(["entries": try LocationLog.shared.entries(afterId: afterId, limit: limit)])
+            } catch {
+                call.reject("Could not read the location log", nil, error)
+            }
+        }
+    }
+
+    @objc func clearLocationLog(_ call: CAPPluginCall) {
+        guard isWholeNumberOrAbsent(call, "upToId") else {
+            return call.reject("upToId must be a number")
+        }
+        let upToId = call.getDouble("upToId").map { Int64($0.rounded()) }
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try LocationLog.shared.clear(upToId: upToId)
+                call.resolve()
+            } catch {
+                call.reject("Could not clear the location log", nil, error)
+            }
+        }
+    }
+
+    private func isWholeNumberOrAbsent(_ call: CAPPluginCall, _ key: String) -> Bool {
+        guard call.options[key] != nil else { return true }
+        guard let value = call.getDouble(key) else { return false }
+        return Int64(exactly: value.rounded()) != nil
     }
 
     private func ensureGeofenceLocationManager() -> CLLocationManager {
@@ -876,6 +918,12 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
               let location = locations.last,
               isLocationValid(location) else {
             return
+        }
+
+        if locationLogEnabled {
+            var entry = locationPayload(location)
+            entry["source"] = nil
+            LocationLog.shared.append(entry, maxEntries: locationLogMaxEntries)
         }
 
         // Native delivery does not depend on the bridge, so it keeps working
