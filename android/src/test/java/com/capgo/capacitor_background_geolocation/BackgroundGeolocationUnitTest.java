@@ -235,23 +235,16 @@ public class BackgroundGeolocationUnitTest {
     private static class ServiceStartNotAllowedException extends RuntimeException {}
 
     @Test
-    public void testIsNumberOrAbsentAcceptsNumbersAndMissingKeys() {
+    public void testIsNumberOrAbsent() {
         JSObject data = new JSObject();
         data.put("afterId", 4211);
+        data.put("upToId", JSONObject.NULL);
+        data.put("limit", "50");
         PluginCall call = new PluginCall(null, "BackgroundGeolocation", "test-callback", "getLocationLog", data);
 
         assertTrue(BackgroundGeolocation.isNumberOrAbsent(call, "afterId"));
-        assertTrue(BackgroundGeolocation.isNumberOrAbsent(call, "upToId"));
-    }
-
-    @Test
-    public void testIsNumberOrAbsentRejectsOtherValues() {
-        JSObject data = new JSObject();
-        data.put("upToId", JSONObject.NULL);
-        data.put("afterId", "4211");
-        PluginCall call = new PluginCall(null, "BackgroundGeolocation", "test-callback", "clearLocationLog", data);
-
+        assertTrue(BackgroundGeolocation.isNumberOrAbsent(call, "missing"));
         assertFalse(BackgroundGeolocation.isNumberOrAbsent(call, "upToId"));
-        assertFalse(BackgroundGeolocation.isNumberOrAbsent(call, "afterId"));
+        assertFalse(BackgroundGeolocation.isNumberOrAbsent(call, "limit"));
     }
 }

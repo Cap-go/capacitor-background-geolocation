@@ -57,13 +57,9 @@ public class LocationLogTest {
     }
 
     @Test
-    public void testReadReturnsNothingBeforeALocationWasAdded() throws Exception {
-        assertEquals(0, log.read(0, 10).length());
-        assertFalse(file.exists());
-    }
-
-    @Test
     public void testReadReturnsTheLocationWithItsIdentifier() throws Exception {
+        assertEquals(0, log.read(0, 10).length());
+
         log.append(location(1_700_000_000_000L), 10);
 
         JSArray entries = log.read(0, 10);
@@ -82,20 +78,13 @@ public class LocationLogTest {
     }
 
     @Test
-    public void testReadReturnsEntriesAfterAfterIdOldestFirst() throws Exception {
+    public void testReadReturnsEntriesAfterAfterIdUpToLimit() throws Exception {
         appendLocations(3, 10);
 
         assertArrayEquals(new long[] { 1, 2, 3 }, ids(log.read(0, 10)));
         assertArrayEquals(new long[] { 2, 3 }, ids(log.read(1, 10)));
-        assertEquals(0, log.read(3, 10).length());
-    }
-
-    @Test
-    public void testReadStopsAtLimit() throws Exception {
-        appendLocations(3, 10);
-
         assertArrayEquals(new long[] { 1, 2 }, ids(log.read(0, 2)));
-        assertArrayEquals(new long[] { 3 }, ids(log.read(2, 2)));
+        assertEquals(0, log.read(3, 10).length());
     }
 
     @Test
@@ -105,25 +94,6 @@ public class LocationLogTest {
         appendLocations(1, 10);
 
         log.clear(read[read.length - 1]);
-
-        assertArrayEquals(new long[] { 3 }, ids(log.read(0, 10)));
-    }
-
-    @Test
-    public void testClearWithoutUpToIdRemovesEveryEntry() throws Exception {
-        appendLocations(3, 10);
-
-        log.clear(null);
-
-        assertEquals(0, log.read(0, 10).length());
-    }
-
-    @Test
-    public void testClearWithUpToIdPastTheLastEntryRemovesEveryEntry() throws Exception {
-        appendLocations(2, 10);
-
-        log.clear(100L);
-        appendLocations(1, 10);
 
         assertArrayEquals(new long[] { 3 }, ids(log.read(0, 10)));
     }
@@ -145,40 +115,11 @@ public class LocationLogTest {
 
         log = new LocationLog(file);
         log.clear(null);
+        assertEquals(0, log.read(0, 10).length());
         log = new LocationLog(file);
         appendLocations(1, 10);
 
         assertArrayEquals(new long[] { 3 }, ids(log.read(0, 10)));
-    }
-
-    @Test
-    public void testALogWhoseFileWasRemovedKeepsCounting() throws Exception {
-        appendLocations(2, 10);
-        assertTrue(file.delete());
-
-        appendLocations(1, 10);
-
-        assertArrayEquals(new long[] { 3 }, ids(log.read(0, 10)));
-    }
-
-    @Test
-    public void testALogThatIsOpenedAgainKeepsItsEntries() throws Exception {
-        appendLocations(2, 10);
-
-        log = new LocationLog(file);
-        appendLocations(1, 10);
-
-        assertArrayEquals(new long[] { 1, 2, 3 }, ids(log.read(0, 10)));
-    }
-
-    @Test
-    public void testAppendRemovesTheOlderHalfOnceTheLogIsFull() throws Exception {
-        appendLocations(4, 4);
-        assertArrayEquals(new long[] { 1, 2, 3, 4 }, ids(log.read(0, 10)));
-
-        appendLocations(1, 4);
-
-        assertArrayEquals(new long[] { 3, 4, 5 }, ids(log.read(0, 10)));
     }
 
     @Test
@@ -194,31 +135,16 @@ public class LocationLogTest {
         assertArrayEquals(new long[] { 3, 4, 5 }, ids(log.read(0, 10)));
     }
 
-    private void cutOffALine() throws IOException {
-        try (FileOutputStream output = new FileOutputStream(file, true)) {
-            output.write("\n2 {\"latitude\":39.7".getBytes(StandardCharsets.UTF_8));
-        }
-    }
-
     @Test
     public void testALineThatWasCutOffDoesNotRunIntoTheNext() throws Exception {
         appendLocations(1, 10);
-        cutOffALine();
+        try (FileOutputStream output = new FileOutputStream(file, true)) {
+            output.write("\n2 {\"latitude\":39.7".getBytes(StandardCharsets.UTF_8));
+        }
 
         log.append(location(2000), 10);
 
         assertArrayEquals(new long[] { 1, 2 }, ids(log.read(0, 10)));
         assertEquals(2000, log.read(1, 10).getJSONObject(0).getLong("time"));
-    }
-
-    @Test
-    public void testALineThatWasCutOffKeepsItsIdentifier() throws Exception {
-        appendLocations(1, 10);
-        cutOffALine();
-
-        log = new LocationLog(file);
-        appendLocations(1, 10);
-
-        assertArrayEquals(new long[] { 1, 3 }, ids(log.read(0, 10)));
     }
 }

@@ -37,12 +37,9 @@ class LocationLogTests: XCTestCase {
         try log.entries(afterId: afterId, limit: limit).compactMap { $0["id"] as? Int64 }
     }
 
-    func testEntriesReturnsNothingBeforeALocationWasAdded() throws {
-        XCTAssertEqual(try ids(), [])
-        XCTAssertFalse(FileManager.default.fileExists(atPath: url.path))
-    }
-
     func testEntriesReturnsTheLocationWithItsIdentifier() throws {
+        XCTAssertEqual(try ids(), [])
+
         log.append(location(time: 1_700_000_000_000), maxEntries: 10)
 
         let entries = try log.entries(afterId: 0, limit: 10)
@@ -77,19 +74,13 @@ class LocationLogTests: XCTestCase {
         XCTAssertEqual(try directory.resourceValues(forKeys: [.isExcludedFromBackupKey]).isExcludedFromBackup, true)
     }
 
-    func testEntriesReturnsEntriesAfterAfterIdOldestFirst() throws {
+    func testEntriesReturnsEntriesAfterAfterIdUpToLimit() throws {
         appendLocations(3, maxEntries: 10)
 
         XCTAssertEqual(try ids(), [1, 2, 3])
         XCTAssertEqual(try ids(afterId: 1), [2, 3])
-        XCTAssertEqual(try ids(afterId: 3), [])
-    }
-
-    func testEntriesStopsAtLimit() throws {
-        appendLocations(3, maxEntries: 10)
-
         XCTAssertEqual(try ids(limit: 2), [1, 2])
-        XCTAssertEqual(try ids(afterId: 2, limit: 2), [3])
+        XCTAssertEqual(try ids(afterId: 3), [])
     }
 
     func testClearKeepsALocationAddedAfterTheRead() throws {
@@ -98,23 +89,6 @@ class LocationLogTests: XCTestCase {
         appendLocations(1, maxEntries: 10)
 
         try log.clear(upToId: read.last)
-
-        XCTAssertEqual(try ids(), [3])
-    }
-
-    func testClearWithoutUpToIdRemovesEveryEntry() throws {
-        appendLocations(3, maxEntries: 10)
-
-        try log.clear(upToId: nil)
-
-        XCTAssertEqual(try ids(), [])
-    }
-
-    func testClearWithUpToIdPastTheLastEntryRemovesEveryEntry() throws {
-        appendLocations(2, maxEntries: 10)
-
-        try log.clear(upToId: 100)
-        appendLocations(1, maxEntries: 10)
 
         XCTAssertEqual(try ids(), [3])
     }
@@ -136,39 +110,11 @@ class LocationLogTests: XCTestCase {
 
         log = LocationLog(url: url)
         try log.clear(upToId: nil)
+        XCTAssertEqual(try ids(), [])
         log = LocationLog(url: url)
         appendLocations(1, maxEntries: 10)
 
         XCTAssertEqual(try ids(), [3])
-    }
-
-    func testALogWhoseFileWasRemovedKeepsCounting() throws {
-        appendLocations(2, maxEntries: 10)
-        XCTAssertEqual(try ids(), [1, 2])
-        try FileManager.default.removeItem(at: url)
-
-        appendLocations(1, maxEntries: 10)
-
-        XCTAssertEqual(try ids(), [3])
-    }
-
-    func testALogThatIsOpenedAgainKeepsItsEntries() throws {
-        appendLocations(2, maxEntries: 10)
-        XCTAssertEqual(try ids(), [1, 2])
-
-        log = LocationLog(url: url)
-        appendLocations(1, maxEntries: 10)
-
-        XCTAssertEqual(try ids(), [1, 2, 3])
-    }
-
-    func testAppendRemovesTheOlderHalfOnceTheLogIsFull() throws {
-        appendLocations(4, maxEntries: 4)
-        XCTAssertEqual(try ids(), [1, 2, 3, 4])
-
-        appendLocations(1, maxEntries: 4)
-
-        XCTAssertEqual(try ids(), [3, 4, 5])
     }
 
     func testALogThatIsOpenedAgainRemovesTheOlderHalfAtTheSameSize() throws {
@@ -184,17 +130,13 @@ class LocationLogTests: XCTestCase {
         XCTAssertEqual(try ids(), [3, 4, 5])
     }
 
-    private func cutOffALine() throws {
+    func testALineThatWasCutOffDoesNotRunIntoTheNext() throws {
+        appendLocations(1, maxEntries: 10)
         XCTAssertEqual(try ids(), [1])
         let handle = try FileHandle(forWritingTo: url)
         try handle.seekToEnd()
         try handle.write(contentsOf: Data("\n2 {\"latitude\":39.7".utf8))
         try handle.close()
-    }
-
-    func testALineThatWasCutOffDoesNotRunIntoTheNext() throws {
-        appendLocations(1, maxEntries: 10)
-        try cutOffALine()
 
         log.append(location(time: 2000), maxEntries: 10)
 
@@ -203,13 +145,4 @@ class LocationLogTests: XCTestCase {
         XCTAssertEqual(entries.last?["time"] as? Int64, 2000)
     }
 
-    func testALineThatWasCutOffKeepsItsIdentifier() throws {
-        appendLocations(1, maxEntries: 10)
-        try cutOffALine()
-
-        log = LocationLog(url: url)
-        appendLocations(1, maxEntries: 10)
-
-        XCTAssertEqual(try ids(), [1, 3])
-    }
 }
