@@ -210,7 +210,6 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             self.locationHeaders = [:]
             self.minIntervalMs = 0
             self.lastPostedLocationTime = nil
-            self.locationLogEnabled = false
 
             if let callbackId = self.activeCallbackId {
                 if let savedCall = self.bridge?.savedCall(withID: callbackId) {

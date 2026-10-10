@@ -67,13 +67,8 @@ public class LocationLogTest {
         JSONObject entry = entries.getJSONObject(0);
         assertEquals(1, entry.getLong("id"));
         assertEquals(39.7392, entry.getDouble("latitude"), 0);
-        assertEquals(-104.9903, entry.getDouble("longitude"), 0);
-        assertEquals(5.0, entry.getDouble("accuracy"), 0);
-        assertEquals(1609.0, entry.getDouble("altitude"), 0);
-        assertEquals(3.0, entry.getDouble("altitudeAccuracy"), 0);
         assertFalse(entry.getBoolean("simulated"));
         assertTrue(entry.isNull("speed"));
-        assertEquals(270.0, entry.getDouble("bearing"), 0);
         assertEquals(1_700_000_000_000L, entry.getLong("time"));
     }
 

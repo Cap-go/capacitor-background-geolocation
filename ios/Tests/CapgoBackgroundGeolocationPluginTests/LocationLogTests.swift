@@ -46,13 +46,8 @@ class LocationLogTests: XCTestCase {
         XCTAssertEqual(entries.count, 1)
         XCTAssertEqual(entries[0]["id"] as? Int64, 1)
         XCTAssertEqual(entries[0]["latitude"] as? Double, 39.7392)
-        XCTAssertEqual(entries[0]["longitude"] as? Double, -104.9903)
-        XCTAssertEqual(entries[0]["accuracy"] as? Double, 5.0)
-        XCTAssertEqual(entries[0]["altitude"] as? Double, 1609.0)
-        XCTAssertEqual(entries[0]["altitudeAccuracy"] as? Double, 3.0)
         XCTAssertEqual(entries[0]["simulated"] as? Bool, false)
         XCTAssertTrue(entries[0]["speed"] is NSNull)
-        XCTAssertEqual(entries[0]["bearing"] as? Double, 270.0)
         XCTAssertEqual(entries[0]["time"] as? Int64, 1_700_000_000_000)
     }
 

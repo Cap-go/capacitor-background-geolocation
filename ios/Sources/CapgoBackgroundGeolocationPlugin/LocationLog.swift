@@ -114,10 +114,8 @@ final class LocationLog {
         let data = try Data(contentsOf: url, options: .alwaysMapped)
         let kept = data.split(separator: LocationLog.newline).drop { (LocationLog.id(of: $0) ?? -1) <= upToId }
         let rewritten = url.appendingPathExtension("tmp")
-        var moved = false
-        defer {
-            if !moved { try? FileManager.default.removeItem(at: rewritten) }
-        }
+        // Removes what is left of it when the rewrite fails. After the move there is nothing to remove.
+        defer { try? FileManager.default.removeItem(at: rewritten) }
         try Data().write(to: rewritten, options: LocationLog.protection)
         let handle = try FileHandle(forWritingTo: rewritten)
         defer { try? handle.close() }
@@ -131,7 +129,6 @@ final class LocationLog {
         guard rename(rewritten.path, url.path) == 0 else {
             throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }
-        moved = true
         count = kept.count
     }
 

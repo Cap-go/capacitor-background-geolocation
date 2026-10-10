@@ -60,7 +60,7 @@ public class BackgroundGeolocationService extends Service {
     private float currentDistanceFilter;
     private long currentMinIntervalMs;
     private boolean locationLogEnabled;
-    private int locationLogMaxEntries = LocationLog.DEFAULT_MAX_ENTRIES;
+    private int locationLogMaxEntries;
     private PowerManager.WakeLock wakeLock;
 
     // How long a GPS fix is considered "fresh" before we allow a NETWORK_PROVIDER fix through.
@@ -303,8 +303,7 @@ public class BackgroundGeolocationService extends Service {
         });
     }
 
-    // Adds a location to the location log on the log's own thread, so a slow
-    // disk or a POST that hangs never holds it back.
+    // Adds a location to the location log on the log's own thread, so a slow disk never holds up the next one.
     private void logLocation(android.location.Location location) {
         Context context = getApplicationContext();
         JSONObject entry = locationToJson(location);

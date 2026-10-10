@@ -29,8 +29,6 @@ final class LocationLog {
     // Runs the reads and writes one at a time, in order and off the main thread.
     static final Executor EXECUTOR = Executors.newSingleThreadExecutor();
 
-    private static final String FILE_NAME = "capgo_background_geolocation_location_log.txt";
-
     private static LocationLog instance;
 
     private final File file;
@@ -41,7 +39,7 @@ final class LocationLog {
     static synchronized LocationLog getInstance(Context context) {
         if (instance == null) {
             // Kept out of device backups, which Android skips for the whole app once its files pass 25 MB.
-            instance = new LocationLog(new File(context.getNoBackupFilesDir(), FILE_NAME));
+            instance = new LocationLog(new File(context.getNoBackupFilesDir(), "capgo_background_geolocation_location_log.txt"));
         }
         return instance;
     }
@@ -77,9 +75,12 @@ final class LocationLog {
             String line;
             while (entries.length() < limit && (line = reader.readLine()) != null) {
                 long id = idOf(line);
-                JSONObject entry = id > afterId ? entryOf(line, id) : null;
-                if (entry != null) {
-                    entries.put(entry);
+                if (id > afterId) {
+                    try {
+                        entries.put(new JSONObject(line.substring(line.indexOf(' ') + 1)).put("id", id));
+                    } catch (JSONException exception) {
+                        // A line that was cut off, or the one an emptied log keeps for its last identifier.
+                    }
                 }
             }
         }
@@ -100,21 +101,18 @@ final class LocationLog {
         if (loaded) {
             return;
         }
-        long last = 0;
-        int entries = 0;
+        count = 0;
         if (file.exists()) {
             try (BufferedReader reader = reader()) {
                 String line;
                 while ((line = reader.readLine()) != null) {
-                    last = Math.max(last, idOf(line));
+                    lastId = Math.max(lastId, idOf(line));
                     if (line.indexOf(' ') != -1) {
-                        entries++;
+                        count++;
                     }
                 }
             }
         }
-        lastId = last;
-        count = entries;
         loaded = true;
     }
 
@@ -161,19 +159,6 @@ final class LocationLog {
             return Long.parseLong(space == -1 ? line : line.substring(0, space));
         } catch (NumberFormatException exception) {
             return -1;
-        }
-    }
-
-    // The location on a line with its identifier, or null if the line has none.
-    private static JSONObject entryOf(String line, long id) {
-        int space = line.indexOf(' ');
-        if (space == -1) {
-            return null;
-        }
-        try {
-            return new JSONObject(line.substring(space + 1)).put("id", id);
-        } catch (JSONException exception) {
-            return null;
         }
     }
 }

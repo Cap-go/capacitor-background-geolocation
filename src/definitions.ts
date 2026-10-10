@@ -217,11 +217,10 @@ export interface StartOptions {
    * The file is written from native code, so it keeps recording while the
    * WebView is suspended, and it survives `stop()`, app restarts and reboots.
    * It is left out of device backups. Read it with
-   * {@link BackgroundGeolocationPlugin.getLocationLog}, for example when the
-   * app returns to the foreground or the network is back.
+   * {@link BackgroundGeolocationPlugin.getLocationLog}.
    *
-   * The log records for as long as tracking runs. Tracking ends when the app
-   * is closed, except on Android with {@link StartOptions.url} set.
+   * Tracking, and the log with it, ends when the app is closed, except on
+   * Android with {@link StartOptions.url} set.
    *
    * @since 8.5.0
    * @default false
@@ -718,7 +717,7 @@ export interface GetLocationLogOptions {
  */
 export interface LocationLogResult {
   /**
-   * Matching entries, oldest first.
+   * The entries, oldest first.
    *
    * @since 8.5.0
    */
@@ -925,8 +924,7 @@ export interface BackgroundGeolocationPlugin {
 
   /**
    * Removes entries from the location log, for example once they have been
-   * read or uploaded. With `upToId` set to the last `id` that was read, a
-   * location that arrived in the meantime is kept.
+   * read or uploaded.
    *
    * @param options Which entries to remove
    * @returns A promise that resolves when the entries are removed
