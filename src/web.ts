@@ -13,6 +13,7 @@ import type {
   GeofenceTransitionEvent,
   BackgroundGeolocationPermissionStatus,
   UpdateHeadersOptions,
+  LocationLogResult,
 } from './definitions';
 
 interface WebGeofence {
@@ -174,6 +175,14 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
 
   async getMonitoredGeofences(): Promise<MonitoredGeofencesResult> {
     return { regions: Array.from(this.geofences.keys()) };
+  }
+
+  async getLocationLog(): Promise<LocationLogResult> {
+    return { entries: [] };
+  }
+
+  async clearLocationLog(): Promise<void> {
+    return;
   }
 
   async checkPermissions(): Promise<BackgroundGeolocationPermissionStatus> {
