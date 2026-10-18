@@ -128,24 +128,10 @@ public class BackgroundGeolocationUnitTest {
         assertTrue(filter.usesSoftwareDistanceFilter());
         assertEquals(0f, filter.nativeMinDistanceMeters(), 0.001f);
 
-        Location first = new Location("gps");
-        first.setLatitude(0);
-        first.setLongitude(0);
-        first.setTime(1_000L);
-        assertTrue(filter.shouldForward(first));
-        filter.markForwarded(first);
-
-        Location nearby = new Location("gps");
-        nearby.setLatitude(0);
-        nearby.setLongitude(0.00001);
-        nearby.setTime(5_000L);
-        assertFalse(filter.shouldForward(nearby));
-
-        Location tick = new Location("gps");
-        tick.setLatitude(0);
-        tick.setLongitude(0.00001);
-        tick.setTime(16_500L);
-        assertTrue(filter.shouldForward(tick));
+        assertTrue(LocationForwardFilter.shouldForwardDecision(20f, 15_000L, 5_000L, 0, 0.0003, 1_000L, 0, 0));
+        assertFalse(LocationForwardFilter.shouldForwardDecision(20f, 15_000L, 5_000L, 0, 0.00001, 1_000L, 0, 0));
+        assertTrue(LocationForwardFilter.shouldForwardDecision(20f, 15_000L, 16_500L, 0, 0.00001, 1_000L, 0, 0));
+        assertTrue(LocationForwardFilter.distanceMeters(0, 0, 0, 0.00001) < 20);
     }
 
     @Test
