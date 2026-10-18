@@ -917,11 +917,13 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             return
         }
 
-        guard forwardFilter.shouldForward(location) else {
-            return
+        if intervalMs > 0 {
+            guard forwardFilter.shouldForward(location) else {
+                return
+            }
+            forwardFilter.markForwarded(location)
+            scheduleIntervalTick()
         }
-        forwardFilter.markForwarded(location)
-        scheduleIntervalTick()
 
         // Native delivery does not depend on the bridge, so it keeps working
         // even if the WebView is gone.

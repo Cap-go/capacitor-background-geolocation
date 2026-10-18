@@ -274,11 +274,13 @@ public class BackgroundGeolocationService extends Service {
             }
         }
         startWatchdog();
-        if (!forwardFilter.shouldForward(location)) {
-            return;
+        if (currentIntervalMs > 0) {
+            if (!forwardFilter.shouldForward(location)) {
+                return;
+            }
+            forwardFilter.markForwarded(location);
+            scheduleIntervalTick();
         }
-        forwardFilter.markForwarded(location);
-        scheduleIntervalTick();
         if (nativePostUrl != null) {
             postLocationNatively(location);
         }
@@ -390,7 +392,8 @@ public class BackgroundGeolocationService extends Service {
                     }
                 });
             } else {
-                client.requestSingleUpdate(LocationManager.GPS_PROVIDER, locationCallback, Looper.getMainLooper());
+                LocationListenerCompat oneShot = (fix) -> handleLocationChanged(fix);
+                client.requestSingleUpdate(LocationManager.GPS_PROVIDER, oneShot, Looper.getMainLooper());
             }
         } catch (SecurityException ignore) {
             // Permissions are requested by the plugin; ignore if not granted yet.

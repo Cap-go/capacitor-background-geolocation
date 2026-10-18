@@ -19,7 +19,10 @@ struct LocationForwardFilter {
     }
 
     func shouldForward(_ location: CLLocation) -> Bool {
-        guard let lastForwarded else {
+        guard intervalMs > 0 else {
+            return true
+        }
+        guard distanceFilterMeters > 0, let lastForwarded else {
             return true
         }
         if distanceFilterMeters > 0, location.distance(from: lastForwarded) >= distanceFilterMeters {

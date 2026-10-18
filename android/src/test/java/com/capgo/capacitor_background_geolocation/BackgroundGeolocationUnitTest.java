@@ -122,6 +122,14 @@ public class BackgroundGeolocationUnitTest {
     }
 
     @Test
+    public void testForwardFilterSkipsSoftwareGateWithoutInterval() {
+        LocationForwardFilter filter = new LocationForwardFilter();
+        filter.configure(0f, 0L);
+        assertFalse(filter.usesSoftwareDistanceFilter());
+        assertFalse(LocationForwardFilter.shouldForwardDecision(0f, 0L, 5_000L, 1, 1, 1_000L, 0, 0));
+    }
+
+    @Test
     public void testLocationForwardFilterDistanceAndInterval() {
         LocationForwardFilter filter = new LocationForwardFilter();
         filter.configure(20f, 15_000L);

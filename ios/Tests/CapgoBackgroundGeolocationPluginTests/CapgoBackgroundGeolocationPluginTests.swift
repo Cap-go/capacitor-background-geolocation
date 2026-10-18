@@ -53,6 +53,22 @@ class CapgoBackgroundGeolocationTests: XCTestCase {
 
     // MARK: - Location forward filter
 
+    func testLocationForwardFilterDefaultsForwardAll() {
+        var filter = LocationForwardFilter()
+        filter.configure(distanceFilterMeters: 0, intervalMs: 0)
+        let first = CLLocation(latitude: 0, longitude: 0)
+        let second = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 0.00001, longitude: 0),
+            altitude: 0,
+            horizontalAccuracy: 5,
+            verticalAccuracy: 5,
+            timestamp: first.timestamp.addingTimeInterval(1)
+        )
+        XCTAssertTrue(filter.shouldForward(first))
+        filter.markForwarded(first)
+        XCTAssertTrue(filter.shouldForward(second))
+    }
+
     func testLocationForwardFilterDistanceAndInterval() {
         var filter = LocationForwardFilter()
         filter.configure(distanceFilterMeters: 20, intervalMs: 15_000)

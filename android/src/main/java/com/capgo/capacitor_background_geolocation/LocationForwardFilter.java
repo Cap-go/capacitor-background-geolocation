@@ -36,7 +36,10 @@ final class LocationForwardFilter {
         if (location == null) {
             return false;
         }
-        if (lastForwarded == null) {
+        if (intervalMs <= 0) {
+            return true;
+        }
+        if (lastForwarded == null || distanceFilterMeters <= 0) {
             return true;
         }
         return shouldForwardDecision(
