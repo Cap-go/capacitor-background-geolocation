@@ -15,6 +15,7 @@ import android.location.LocationManager;
 import android.media.MediaPlayer;
 import android.os.Binder;
 import android.os.Build;
+import android.os.CancellationSignal;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -57,8 +58,11 @@ public class BackgroundGeolocationService extends Service {
     private Handler watchdogHandler = new Handler(Looper.getMainLooper());
     private Runnable watchdogRunnable;
     private Runnable restartRunnable;
+    private Runnable intervalTickRunnable;
     private float currentDistanceFilter;
     private long currentMinIntervalMs;
+    private long currentIntervalMs;
+    private final LocationForwardFilter forwardFilter = new LocationForwardFilter();
     private PowerManager.WakeLock wakeLock;
 
     // How long a GPS fix is considered "fresh" before we allow a NETWORK_PROVIDER fix through.
@@ -106,6 +110,7 @@ public class BackgroundGeolocationService extends Service {
         releaseMediaPlayer();
         releaseWakeLock();
         stopWatchdog();
+        cancelIntervalTick();
         stopSelf();
         return false;
     }
@@ -145,6 +150,8 @@ public class BackgroundGeolocationService extends Service {
             client = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
             currentDistanceFilter = LocationStore.getDistanceFilter(context);
             currentMinIntervalMs = LocationStore.getMinIntervalMs(context);
+            currentIntervalMs = LocationStore.getIntervalMs(context);
+            forwardFilter.configure(currentDistanceFilter, currentIntervalMs);
             networkFallbackEnabled = LocationStore.getNetworkFallback(context);
             locationCallback = createLocationListener(this);
             lastGpsFixAtMs = SystemClock.elapsedRealtime();
@@ -163,6 +170,7 @@ public class BackgroundGeolocationService extends Service {
         releaseMediaPlayer();
         releaseWakeLock();
         stopWatchdog();
+        cancelIntervalTick();
         if (postExecutor != null) {
             postExecutor.shutdown();
             postExecutor = null;
@@ -265,6 +273,11 @@ public class BackgroundGeolocationService extends Service {
             }
         }
         startWatchdog();
+        if (!forwardFilter.shouldForward(location)) {
+            return;
+        }
+        forwardFilter.markForwarded(location);
+        scheduleIntervalTick();
         if (nativePostUrl != null) {
             postLocationNatively(location);
         }
@@ -330,9 +343,62 @@ public class BackgroundGeolocationService extends Service {
         return currentMinIntervalMs > 0 ? currentMinIntervalMs : 1000L;
     }
 
+    private float nativeMinDistanceMeters() {
+        return forwardFilter.nativeMinDistanceMeters();
+    }
+
+    private void scheduleIntervalTick() {
+        if (intervalTickRunnable != null) {
+            watchdogHandler.removeCallbacks(intervalTickRunnable);
+        }
+        if (forwardFilter.getIntervalMs() <= 0) {
+            return;
+        }
+        if (intervalTickRunnable == null) {
+            intervalTickRunnable = this::onIntervalTickDue;
+        }
+        watchdogHandler.postDelayed(intervalTickRunnable, forwardFilter.getIntervalMs());
+    }
+
+    private void cancelIntervalTick() {
+        if (intervalTickRunnable != null) {
+            watchdogHandler.removeCallbacks(intervalTickRunnable);
+        }
+    }
+
+    private void onIntervalTickDue() {
+        if (forwardFilter.getIntervalMs() <= 0 || client == null) {
+            return;
+        }
+        if (forwardFilter.millisSinceLastForward() >= forwardFilter.getIntervalMs()) {
+            requestFreshLocationFix();
+        }
+        scheduleIntervalTick();
+    }
+
+    @SuppressLint("MissingPermission")
+    private void requestFreshLocationFix() {
+        if (client == null) {
+            return;
+        }
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                client.getCurrentLocation(LocationManager.GPS_PROVIDER, new CancellationSignal(), getMainExecutor(), (location) -> {
+                    if (location != null) {
+                        handleLocationChanged(location);
+                    }
+                });
+            } else {
+                client.requestSingleUpdate(LocationManager.GPS_PROVIDER, locationCallback, Looper.getMainLooper());
+            }
+        } catch (SecurityException ignore) {
+            // Permissions are requested by the plugin; ignore if not granted yet.
+        }
+    }
+
     private void requestLocationUpdates() {
         try {
-            client.requestLocationUpdates(LocationManager.GPS_PROVIDER, locationIntervalMs(), currentDistanceFilter, locationCallback);
+            client.requestLocationUpdates(LocationManager.GPS_PROVIDER, locationIntervalMs(), nativeMinDistanceMeters(), locationCallback);
         } catch (SecurityException ignore) {
             // According to Android Studio, this method can throw a Security Exception if
             // permissions are not yet granted. Rather than check the permissions, which is fiddly,
@@ -351,7 +417,7 @@ public class BackgroundGeolocationService extends Service {
                 client.requestLocationUpdates(
                     LocationManager.NETWORK_PROVIDER,
                     locationIntervalMs(),
-                    currentDistanceFilter,
+                    nativeMinDistanceMeters(),
                     locationCallback
                 );
             }
@@ -396,6 +462,7 @@ public class BackgroundGeolocationService extends Service {
             final String url,
             final Map<String, String> headers,
             final long minIntervalMs,
+            final long intervalMs,
             final boolean networkFallback
         ) {
             // The plugin starts this service with startForegroundService(). If the setup
@@ -410,6 +477,8 @@ public class BackgroundGeolocationService extends Service {
             callbackId = id;
             currentDistanceFilter = distanceFilter;
             currentMinIntervalMs = Math.max(0L, minIntervalMs);
+            currentIntervalMs = Math.max(0L, intervalMs);
+            forwardFilter.configure(currentDistanceFilter, currentIntervalMs);
             networkFallbackEnabled = networkFallback;
 
             nativePostUrl = url == null || url.isEmpty() ? null : url;
@@ -421,6 +490,7 @@ public class BackgroundGeolocationService extends Service {
                 distanceFilter,
                 headers,
                 currentMinIntervalMs,
+                currentIntervalMs,
                 networkFallback
             );
 
@@ -434,6 +504,7 @@ public class BackgroundGeolocationService extends Service {
             // Arm the watchdog here so rejected network fixes during the grace period cannot
             // leave tracking without a restart path if GPS_PROVIDER goes silent.
             startWatchdog();
+            scheduleIntervalTick();
         }
 
         void updateHeaders(final Map<String, String> headers) {
@@ -443,6 +514,8 @@ public class BackgroundGeolocationService extends Service {
         String stop() {
             LocationStore.clear(getApplicationContext());
             nativePostUrl = null;
+            cancelIntervalTick();
+            forwardFilter.configure(0f, 0L);
             stopWatchdog();
             // stop() can reach a bound service whose start() has not run yet
             // (JS calls start() then stop() back-to-back), in which case neither

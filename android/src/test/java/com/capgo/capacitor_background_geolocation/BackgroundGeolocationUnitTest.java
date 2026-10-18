@@ -122,6 +122,43 @@ public class BackgroundGeolocationUnitTest {
     }
 
     @Test
+    public void testLocationForwardFilterDistanceAndInterval() {
+        LocationForwardFilter filter = new LocationForwardFilter();
+        filter.configure(20f, 15_000L);
+        assertTrue(filter.usesSoftwareDistanceFilter());
+        assertEquals(0f, filter.nativeMinDistanceMeters(), 0.001f);
+
+        Location first = new Location("gps");
+        first.setLatitude(0);
+        first.setLongitude(0);
+        first.setTime(1_000L);
+        assertTrue(filter.shouldForward(first));
+        filter.markForwarded(first);
+
+        Location nearby = new Location("gps");
+        nearby.setLatitude(0);
+        nearby.setLongitude(0.00001);
+        nearby.setTime(5_000L);
+        assertFalse(filter.shouldForward(nearby));
+
+        Location tick = new Location("gps");
+        tick.setLatitude(0);
+        tick.setLongitude(0.00001);
+        tick.setTime(16_500L);
+        assertTrue(filter.shouldForward(tick));
+    }
+
+    @Test
+    public void testLongOptionFromCallCoercesIntervalMs() throws JSONException {
+        JSObject data = new JSObject();
+        data.put("intervalMs", 15_000);
+
+        PluginCall call = new PluginCall(null, "BackgroundGeolocation", "test-callback", "start", data);
+
+        assertEquals(15_000L, BackgroundGeolocation.longOptionFromCall(call, "intervalMs", 0L));
+    }
+
+    @Test
     public void testLongOptionFromCallUsesDefaultWhenMissing() {
         PluginCall call = new PluginCall(null, "BackgroundGeolocation", "test-callback", "start", new JSObject());
 

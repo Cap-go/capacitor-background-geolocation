@@ -41,6 +41,11 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
   private geofencePayload: Record<string, unknown> = {};
   private notifyOnEntry = true;
   private notifyOnExit = true;
+  private forwardDistanceFilterM = 0;
+  private intervalMs = 0;
+  private lastForwarded: Location | undefined;
+  private lastForwardedAt = 0;
+  private intervalTimer: ReturnType<typeof setInterval> | undefined;
 
   async start(options: StartOptions, callback: (position?: Location, error?: CallbackError) => void): Promise<void> {
     if (!navigator.geolocation) {
@@ -61,30 +66,48 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
       return;
     }
 
-    this.watchId = navigator.geolocation.watchPosition(
-      (position) => {
-        const location: Location = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          altitude: position.coords.altitude,
-          altitudeAccuracy: position.coords.altitudeAccuracy,
-          simulated: false,
-          bearing: position.coords.heading,
-          speed: position.coords.speed,
-          time: position.timestamp,
-        };
-        if (this.audio && this.plannedRoute.length > 0) {
-          const currentPoint: [number, number] = [position.coords.longitude, position.coords.latitude];
-          const offRoute = this.distancePointToRoute(currentPoint) > this.distanceThreshold;
-          if (offRoute == true && this.isOffRoute === false) {
-            this.audio.play();
-          }
-          this.isOffRoute = offRoute;
+    this.forwardDistanceFilterM = options.distanceFilter ?? 0;
+    this.intervalMs = options.intervalMs ?? 0;
+    this.lastForwarded = undefined;
+    this.lastForwardedAt = 0;
+
+    const geoOptions: PositionOptions = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: options.stale ? 300000 : 0,
+    };
+
+    const deliverPosition = (position: GeolocationPosition) => {
+      const location: Location = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy,
+        altitude: position.coords.altitude,
+        altitudeAccuracy: position.coords.altitudeAccuracy,
+        simulated: false,
+        bearing: position.coords.heading,
+        speed: position.coords.speed,
+        time: position.timestamp,
+      };
+      if (!this.shouldForwardLocation(location)) {
+        return;
+      }
+      this.lastForwarded = location;
+      this.lastForwardedAt = Date.now();
+      if (this.audio && this.plannedRoute.length > 0) {
+        const currentPoint: [number, number] = [position.coords.longitude, position.coords.latitude];
+        const offRoute = this.distancePointToRoute(currentPoint) > this.distanceThreshold;
+        if (offRoute == true && this.isOffRoute === false) {
+          this.audio.play();
         }
-        this.checkGeofences(position.coords.latitude, position.coords.longitude);
-        callback(location);
-      },
+        this.isOffRoute = offRoute;
+      }
+      this.checkGeofences(position.coords.latitude, position.coords.longitude);
+      callback(location);
+    };
+
+    this.watchId = navigator.geolocation.watchPosition(
+      (position) => deliverPosition(position),
       (error) => {
         const callbackError: CallbackError = {
           name: 'GeolocationError',
@@ -93,19 +116,66 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
         };
         callback(undefined, callbackError);
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: options.stale ? 300000 : 0,
-      },
+      geoOptions,
     );
+
+    if (this.intervalMs > 0) {
+      this.intervalTimer = setInterval(() => {
+        if (Date.now() - this.lastForwardedAt >= this.intervalMs) {
+          navigator.geolocation.getCurrentPosition(
+            (position) => deliverPosition(position),
+            () => undefined,
+            { ...geoOptions, maximumAge: 0 },
+          );
+        }
+      }, this.intervalMs);
+    }
   }
 
   async stop(): Promise<void> {
+    if (this.intervalTimer) {
+      clearInterval(this.intervalTimer);
+      this.intervalTimer = undefined;
+    }
     if (this.watchId) {
       navigator.geolocation.clearWatch(this.watchId);
       delete this.watchId;
     }
+    this.lastForwarded = undefined;
+    this.lastForwardedAt = 0;
+  }
+
+  private shouldForwardLocation(location: Location): boolean {
+    if (!this.lastForwarded) {
+      return true;
+    }
+    if (this.forwardDistanceFilterM > 0) {
+      const moved = this.haversineMeters(
+        this.lastForwarded.latitude,
+        this.lastForwarded.longitude,
+        location.latitude,
+        location.longitude,
+      );
+      if (moved >= this.forwardDistanceFilterM) {
+        return true;
+      }
+    }
+    const lastTime = this.lastForwarded.time;
+    const currentTime = location.time;
+    if (this.intervalMs > 0 && lastTime != null && currentTime != null && currentTime - lastTime >= this.intervalMs) {
+      return true;
+    }
+    return false;
+  }
+
+  private haversineMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return BackgroundGeolocationWeb.EARTH_RADIUS_M * c;
   }
 
   async openSettings(): Promise<void> {

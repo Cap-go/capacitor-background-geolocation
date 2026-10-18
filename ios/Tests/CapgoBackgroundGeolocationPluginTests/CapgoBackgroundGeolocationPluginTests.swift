@@ -51,6 +51,36 @@ class CapgoBackgroundGeolocationTests: XCTestCase {
         XCTAssertTrue(methodNames.contains("getPluginVersion"))
     }
 
+    // MARK: - Location forward filter
+
+    func testLocationForwardFilterDistanceAndInterval() {
+        var filter = LocationForwardFilter()
+        filter.configure(distanceFilterMeters: 20, intervalMs: 15_000)
+        XCTAssertTrue(filter.usesSoftwareDistanceFilter)
+
+        let first = CLLocation(latitude: 0, longitude: 0)
+        XCTAssertTrue(filter.shouldForward(first))
+        filter.markForwarded(first)
+
+        let nearby = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 0.00001, longitude: 0),
+            altitude: 0,
+            horizontalAccuracy: 5,
+            verticalAccuracy: 5,
+            timestamp: first.timestamp.addingTimeInterval(5)
+        )
+        XCTAssertFalse(filter.shouldForward(nearby))
+
+        let tick = CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: 0.00001, longitude: 0),
+            altitude: 0,
+            horizontalAccuracy: 5,
+            verticalAccuracy: 5,
+            timestamp: first.timestamp.addingTimeInterval(16)
+        )
+        XCTAssertTrue(filter.shouldForward(tick))
+    }
+
     // MARK: - Format Location Tests
 
     func testFormatLocationBasic() {

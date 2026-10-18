@@ -152,6 +152,7 @@ public class BackgroundGeolocation extends Plugin {
                 call.getString("url", null),
                 headersFromCall(call),
                 longOptionFromCall(call, "minIntervalMs", 0L),
+                longOptionFromCall(call, "intervalMs", 0L),
                 call.getBoolean("networkFallback", false)
             );
         });

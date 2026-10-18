@@ -120,8 +120,10 @@ export interface StartOptions {
    * This is used to filter out small movements and reduce the number of updates.
    *
    * A non-zero value suppresses updates while the device is stationary (for
-   * example a parked vehicle). Use {@link StartOptions.minIntervalMs} when you
-   * need a lower update rate but still want periodic points without movement.
+   * example a parked vehicle). Use {@link StartOptions.intervalMs} when you
+   * need periodic fresh fixes without movement while keeping a non-zero
+   * distance filter. {@link StartOptions.minIntervalMs} only throttles native
+   * HTTP POSTs and does not drive the JavaScript callback on iOS.
    *
    * @since 7.0.9
    * @default 0
@@ -180,14 +182,34 @@ export interface StartOptions {
    * faster one).
    *
    * Note: a non-zero {@link StartOptions.distanceFilter} suppresses updates while
-   * the device is stationary, so it cannot substitute for a time interval when
-   * you still need periodic parked-vehicle heartbeats.
+   * the device is stationary unless {@link StartOptions.intervalMs} is also set.
    *
    * @since 8.3.3
    * @default 0
    * @example 120000
    */
   minIntervalMs?: number;
+  /**
+   * Maximum time between JavaScript callbacks, in milliseconds. `0` or unset
+   * keeps today's behaviour (movement-only when {@link StartOptions.distanceFilter}
+   * is non-zero).
+   *
+   * When set, the plugin applies {@link StartOptions.distanceFilter} in software
+   * while subscribing with no native distance gate, so a fresh fix is delivered
+   * at least this often even when the device stays inside the distance radius.
+   * Each tick is a newly produced fix with an updated `time`, not a replay of
+   * the last callback. Movement still delivers points as soon as the distance
+   * threshold is met.
+   *
+   * {@link StartOptions.minIntervalMs} remains a minimum gap for native HTTP
+   * POSTs only. If both are set and `intervalMs` is less than `minIntervalMs`,
+   * `intervalMs` wins for the JavaScript callback.
+   *
+   * @since 8.4.15
+   * @default 0
+   * @example 15000
+   */
+  intervalMs?: number;
   /**
    * Android only - has no effect on iOS. Whether to fall back to
    * `NETWORK_PROVIDER` (cell/Wi-Fi based location) when `GPS_PROVIDER` has

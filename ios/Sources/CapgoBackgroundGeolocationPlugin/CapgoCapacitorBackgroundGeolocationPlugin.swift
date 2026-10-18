@@ -83,6 +83,10 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     private var locationHeaders: [String: String] = [:]
     private var geofenceHeaders: [String: String] = [:]
     private var minIntervalMs: Double = 0
+    private var intervalMs: Double = 0
+    private var configuredDistanceFilterMeters: Double = 0
+    private var forwardFilter = LocationForwardFilter()
+    private var intervalTickWorkItem: DispatchWorkItem?
     private var lastPostedLocationTime: Date?
 
     private let geofenceUrlKey = "CapgoBackgroundGeolocation.geofence.url"
@@ -125,6 +129,12 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             }
             self.locationHeaders = self.stringHeaders(from: call.getObject("headers"))
             self.minIntervalMs = max(0, call.getDouble("minIntervalMs") ?? 0)
+            self.intervalMs = max(0, call.getDouble("intervalMs") ?? 0)
+            self.configuredDistanceFilterMeters = max(0, call.getDouble("distanceFilter") ?? 0)
+            self.forwardFilter.configure(
+                distanceFilterMeters: self.configuredDistanceFilterMeters,
+                intervalMs: self.intervalMs
+            )
             self.lastPostedLocationTime = nil
             // Create fresh location manager and initialize date
             self.locationManager = CLLocationManager()
@@ -159,13 +169,17 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
                 ? kCLLocationAccuracyBestForNavigation
                 : kCLLocationAccuracyBest
         )
-        var distanceFilter = call.getDouble("distanceFilter")
-        // It appears that setting manager.distanceFilter to 0 can prevent
-        // subsequent location updates. See issue #88.
-        if distanceFilter == nil || distanceFilter == 0 {
-            distanceFilter = kCLDistanceFilterNone
+        if intervalMs > 0 {
+            manager.distanceFilter = kCLDistanceFilterNone
+        } else {
+            var distanceFilter = call.getDouble("distanceFilter")
+            // It appears that setting manager.distanceFilter to 0 can prevent
+            // subsequent location updates. See issue #88.
+            if distanceFilter == nil || distanceFilter == 0 {
+                distanceFilter = kCLDistanceFilterNone
+            }
+            manager.distanceFilter = distanceFilter ?? kCLDistanceFilterNone
         }
-        manager.distanceFilter = distanceFilter ?? kCLDistanceFilterNone
         manager.allowsBackgroundLocationUpdates = background
         manager.showsBackgroundLocationIndicator = background
         manager.pausesLocationUpdatesAutomatically = false
@@ -203,6 +217,10 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             self.locationBackendUrl = nil
             self.locationHeaders = [:]
             self.minIntervalMs = 0
+            self.intervalMs = 0
+            self.configuredDistanceFilterMeters = 0
+            self.forwardFilter.configure(distanceFilterMeters: 0, intervalMs: 0)
+            self.cancelIntervalTick()
             self.lastPostedLocationTime = nil
 
             if let callbackId = self.activeCallbackId {
@@ -718,16 +736,37 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         }.resume()
     }
 
+    private func scheduleIntervalTick() {
+        cancelIntervalTick()
+        guard intervalMs > 0 else { return }
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self, let manager = self.locationManager else { return }
+            if self.forwardFilter.millisSinceLastForward() >= self.intervalMs {
+                manager.requestLocation()
+            }
+            self.scheduleIntervalTick()
+        }
+        intervalTickWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + intervalMs / 1000, execute: workItem)
+    }
+
+    private func cancelIntervalTick() {
+        intervalTickWorkItem?.cancel()
+        intervalTickWorkItem = nil
+    }
+
     private func startUpdatingLocation() {
         // Avoid unnecessary calls to startUpdatingLocation, which can
         // result in extraneous invocations of didFailWithError.
         if !isUpdatingLocation, let manager = locationManager {
             manager.startUpdatingLocation()
             isUpdatingLocation = true
+            scheduleIntervalTick()
         }
     }
 
     private func stopUpdatingLocation() {
+        cancelIntervalTick()
         if isUpdatingLocation, let manager = locationManager {
             manager.stopUpdatingLocation()
             isUpdatingLocation = false
@@ -877,6 +916,12 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
               isLocationValid(location) else {
             return
         }
+
+        guard forwardFilter.shouldForward(location) else {
+            return
+        }
+        forwardFilter.markForwarded(location)
+        scheduleIntervalTick()
 
         // Native delivery does not depend on the bridge, so it keeps working
         // even if the WebView is gone.
