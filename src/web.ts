@@ -45,6 +45,7 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
   private intervalMs = 0;
   private lastForwarded: Location | undefined;
   private intervalTimeout: ReturnType<typeof setTimeout> | undefined;
+  private locationSessionId = 0;
 
   async start(options: StartOptions, callback: (position?: Location, error?: CallbackError) => void): Promise<void> {
     if (!navigator.geolocation) {
@@ -68,6 +69,7 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
     this.forwardDistanceFilterM = options.distanceFilter ?? 0;
     this.intervalMs = options.intervalMs ?? 0;
     this.lastForwarded = undefined;
+    const sessionId = ++this.locationSessionId;
 
     const geoOptions: PositionOptions = {
       enableHighAccuracy: true,
@@ -81,15 +83,29 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
         return;
       }
       this.intervalTimeout = setTimeout(() => {
+        const tickSession = sessionId;
         navigator.geolocation.getCurrentPosition(
-          (position) => deliverPosition(position, true),
-          () => scheduleIntervalTick(),
+          (position) => {
+            if (tickSession !== this.locationSessionId) {
+              return;
+            }
+            deliverPosition(position, true);
+          },
+          () => {
+            if (tickSession !== this.locationSessionId) {
+              return;
+            }
+            scheduleIntervalTick();
+          },
           { ...geoOptions, maximumAge: 0 },
         );
       }, this.intervalMs);
     };
 
     const deliverPosition = (position: GeolocationPosition, forceIntervalTick = false) => {
+      if (sessionId !== this.locationSessionId) {
+        return;
+      }
       const location: Location = {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
@@ -119,7 +135,12 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
     };
 
     this.watchId = navigator.geolocation.watchPosition(
-      (position) => deliverPosition(position),
+      (position) => {
+        if (sessionId !== this.locationSessionId) {
+          return;
+        }
+        deliverPosition(position);
+      },
       (error) => {
         const callbackError: CallbackError = {
           name: 'GeolocationError',
@@ -137,6 +158,7 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
   }
 
   async stop(): Promise<void> {
+    this.locationSessionId++;
     this.clearIntervalTick();
     if (this.watchId) {
       navigator.geolocation.clearWatch(this.watchId);

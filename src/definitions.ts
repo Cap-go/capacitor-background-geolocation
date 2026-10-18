@@ -190,16 +190,17 @@ export interface StartOptions {
    */
   minIntervalMs?: number;
   /**
-   * Maximum time between JavaScript callbacks, in milliseconds. `0` or unset
-   * keeps today's behaviour (movement-only when {@link StartOptions.distanceFilter}
-   * is non-zero).
+   * Target interval for requesting fresh fixes and forwarding them to the
+   * JavaScript callback, in milliseconds. `0` or unset keeps today's behaviour
+   * (movement-only when {@link StartOptions.distanceFilter} is non-zero).
    *
    * When set, the plugin applies {@link StartOptions.distanceFilter} in software
-   * while subscribing with no native distance gate, so a fresh fix is delivered
-   * at least this often even when the device stays inside the distance radius.
-   * Each tick is a newly produced fix with an updated `time`, not a replay of
-   * the last callback. Movement still delivers points as soon as the distance
-   * threshold is met.
+   * while subscribing with no native distance gate, and requests another fix on
+   * this interval when the device stays inside the distance radius. Delivery
+   * depends on the platform producing a fix: a slow or failed request can delay
+   * or skip a tick. Each forwarded point is a newly produced fix with an updated
+   * `time`, not a replay of the last callback. Movement still delivers points as
+   * soon as the distance threshold is met.
    *
    * {@link StartOptions.minIntervalMs} remains a minimum gap for native HTTP
    * POSTs only. If both are set and `intervalMs` is less than `minIntervalMs`,
