@@ -82,14 +82,14 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
       }
       this.intervalTimeout = setTimeout(() => {
         navigator.geolocation.getCurrentPosition(
-          (position) => deliverPosition(position),
+          (position) => deliverPosition(position, true),
           () => scheduleIntervalTick(),
           { ...geoOptions, maximumAge: 0 },
         );
       }, this.intervalMs);
     };
 
-    const deliverPosition = (position: GeolocationPosition) => {
+    const deliverPosition = (position: GeolocationPosition, forceIntervalTick = false) => {
       const location: Location = {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
@@ -101,7 +101,7 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
         speed: position.coords.speed,
         time: position.timestamp,
       };
-      if (!this.shouldForwardLocation(location)) {
+      if (!forceIntervalTick && !this.shouldForwardLocation(location)) {
         return;
       }
       this.lastForwarded = location;

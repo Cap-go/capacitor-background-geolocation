@@ -12,6 +12,7 @@ import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofenceStatusCodes;
 import org.json.JSONException;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 /**
  * Unit tests for BackgroundGeolocation plugin
@@ -127,6 +128,8 @@ public class BackgroundGeolocationUnitTest {
         filter.configure(0f, 0L);
         assertFalse(filter.usesSoftwareDistanceFilter());
         assertFalse(LocationForwardFilter.shouldForwardDecision(0f, 0L, 5_000L, 1, 1, 1_000L, 0, 0));
+        Location location = Mockito.mock(Location.class);
+        assertTrue(filter.shouldForward(location));
     }
 
     @Test
