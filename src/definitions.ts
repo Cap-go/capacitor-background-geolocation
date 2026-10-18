@@ -205,7 +205,7 @@ export interface StartOptions {
    * POSTs only. If both are set and `intervalMs` is less than `minIntervalMs`,
    * `intervalMs` wins for the JavaScript callback.
    *
-   * @since 8.4.15
+   * @since 8.4.14
    * @default 0
    * @example 15000
    */
