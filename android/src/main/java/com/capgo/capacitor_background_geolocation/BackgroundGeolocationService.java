@@ -157,6 +157,7 @@ public class BackgroundGeolocationService extends Service {
             lastGpsFixAtMs = SystemClock.elapsedRealtime();
             requestLocationUpdates();
             startWatchdog();
+            scheduleIntervalTick();
         }
         return START_STICKY;
     }
