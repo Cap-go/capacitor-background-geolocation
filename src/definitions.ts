@@ -688,7 +688,8 @@ export interface BackgroundGeolocationPlugin {
    *     backgroundTitle: "Location Service",
    *     requestPermissions: true,
    *     stale: false,
-   *     distanceFilter: 10
+   *     distanceFilter: 20,
+   *     intervalMs: 15000
    *   },
    *   (location, error) => {
    *     if (error) {
