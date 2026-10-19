@@ -30,6 +30,8 @@ final class LocationStore {
     private static final String KEY_HEADERS = "headers";
     private static final String KEY_MIN_INTERVAL_MS = "minIntervalMs";
     private static final String KEY_NETWORK_FALLBACK = "networkFallback";
+    private static final String KEY_LOCATION_LOG = "locationLog";
+    private static final String KEY_LOCATION_LOG_MAX_ENTRIES = "locationLogMaxEntries";
     private static final String KEY_LAST_POST_TIME = "lastPostTime";
 
     private LocationStore() {}
@@ -47,7 +49,9 @@ final class LocationStore {
         float distanceFilter,
         Map<String, String> headers,
         long minIntervalMs,
-        boolean networkFallback
+        boolean networkFallback,
+        boolean locationLog,
+        int locationLogMaxEntries
     ) {
         SharedPreferences.Editor editor = prefs(context).edit();
         if (url == null || url.isEmpty()) {
@@ -62,6 +66,8 @@ final class LocationStore {
                 .putString(KEY_HEADERS, headersToJson(headers))
                 .putLong(KEY_MIN_INTERVAL_MS, Math.max(0L, minIntervalMs))
                 .putBoolean(KEY_NETWORK_FALLBACK, networkFallback)
+                .putBoolean(KEY_LOCATION_LOG, locationLog)
+                .putInt(KEY_LOCATION_LOG_MAX_ENTRIES, locationLogMaxEntries)
                 .remove(KEY_LAST_POST_TIME);
         }
         editor.apply();
@@ -102,6 +108,14 @@ final class LocationStore {
 
     static boolean getNetworkFallback(Context context) {
         return prefs(context).getBoolean(KEY_NETWORK_FALLBACK, false);
+    }
+
+    static boolean getLocationLog(Context context) {
+        return prefs(context).getBoolean(KEY_LOCATION_LOG, false);
+    }
+
+    static int getLocationLogMaxEntries(Context context) {
+        return prefs(context).getInt(KEY_LOCATION_LOG_MAX_ENTRIES, LocationLog.DEFAULT_MAX_ENTRIES);
     }
 
     static Map<String, String> getHeaders(Context context) {

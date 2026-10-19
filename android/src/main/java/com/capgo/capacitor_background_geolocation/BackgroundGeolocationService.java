@@ -59,6 +59,8 @@ public class BackgroundGeolocationService extends Service {
     private Runnable restartRunnable;
     private float currentDistanceFilter;
     private long currentMinIntervalMs;
+    private boolean locationLogEnabled;
+    private int locationLogMaxEntries;
     private PowerManager.WakeLock wakeLock;
 
     // How long a GPS fix is considered "fresh" before we allow a NETWORK_PROVIDER fix through.
@@ -146,6 +148,8 @@ public class BackgroundGeolocationService extends Service {
             currentDistanceFilter = LocationStore.getDistanceFilter(context);
             currentMinIntervalMs = LocationStore.getMinIntervalMs(context);
             networkFallbackEnabled = LocationStore.getNetworkFallback(context);
+            locationLogEnabled = LocationStore.getLocationLog(context);
+            locationLogMaxEntries = LocationStore.getLocationLogMaxEntries(context);
             locationCallback = createLocationListener(this);
             lastGpsFixAtMs = SystemClock.elapsedRealtime();
             requestLocationUpdates();
@@ -265,6 +269,9 @@ public class BackgroundGeolocationService extends Service {
             }
         }
         startWatchdog();
+        if (locationLogEnabled) {
+            logLocation(location);
+        }
         if (nativePostUrl != null) {
             postLocationNatively(location);
         }
@@ -292,6 +299,21 @@ public class BackgroundGeolocationService extends Service {
                 LocationStore.sendLocation(context, payload);
             } catch (Exception e) {
                 Logger.error("Native location POST failed", e);
+            }
+        });
+    }
+
+    // Adds a location to the location log on the log's own thread, so a slow disk never holds up the next one.
+    private void logLocation(android.location.Location location) {
+        Context context = getApplicationContext();
+        JSONObject entry = locationToJson(location);
+        entry.remove("source");
+        int maxEntries = locationLogMaxEntries;
+        LocationLog.EXECUTOR.execute(() -> {
+            try {
+                LocationLog.getInstance(context).append(entry, maxEntries);
+            } catch (Exception e) {
+                Logger.error("Could not add the location to the location log", e);
             }
         });
     }
@@ -396,7 +418,9 @@ public class BackgroundGeolocationService extends Service {
             final String url,
             final Map<String, String> headers,
             final long minIntervalMs,
-            final boolean networkFallback
+            final boolean networkFallback,
+            final boolean locationLog,
+            final int locationLogMaxEntries
         ) {
             // The plugin starts this service with startForegroundService(). If the setup
             // below throws (for example 'provider "gps" does not exist' on a device without
@@ -411,6 +435,8 @@ public class BackgroundGeolocationService extends Service {
             currentDistanceFilter = distanceFilter;
             currentMinIntervalMs = Math.max(0L, minIntervalMs);
             networkFallbackEnabled = networkFallback;
+            locationLogEnabled = locationLog;
+            BackgroundGeolocationService.this.locationLogMaxEntries = locationLogMaxEntries;
 
             nativePostUrl = url == null || url.isEmpty() ? null : url;
             LocationStore.saveSetup(
@@ -421,7 +447,9 @@ public class BackgroundGeolocationService extends Service {
                 distanceFilter,
                 headers,
                 currentMinIntervalMs,
-                networkFallback
+                networkFallback,
+                locationLog,
+                locationLogMaxEntries
             );
 
             // The service may already be running (for example after a sticky
