@@ -70,6 +70,7 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
     this.intervalMs = options.intervalMs ?? 0;
     this.lastForwarded = undefined;
     const sessionId = ++this.locationSessionId;
+    let forwardingGeneration = 0;
 
     const geoOptions: PositionOptions = {
       enableHighAccuracy: true,
@@ -84,15 +85,16 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
       }
       this.intervalTimeout = setTimeout(() => {
         const tickSession = sessionId;
+        const tickGeneration = forwardingGeneration;
         navigator.geolocation.getCurrentPosition(
           (position) => {
-            if (tickSession !== this.locationSessionId) {
+            if (tickSession !== this.locationSessionId || tickGeneration !== forwardingGeneration) {
               return;
             }
             deliverPosition(position, true);
           },
           () => {
-            if (tickSession !== this.locationSessionId) {
+            if (tickSession !== this.locationSessionId || tickGeneration !== forwardingGeneration) {
               return;
             }
             scheduleIntervalTick();
@@ -120,6 +122,7 @@ export class BackgroundGeolocationWeb extends WebPlugin implements BackgroundGeo
       if (!forceIntervalTick && !this.shouldForwardLocation(location)) {
         return;
       }
+      forwardingGeneration++;
       this.lastForwarded = location;
       if (this.audio && this.plannedRoute.length > 0) {
         const currentPoint: [number, number] = [position.coords.longitude, position.coords.latitude];
