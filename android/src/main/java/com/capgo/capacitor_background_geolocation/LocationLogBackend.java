@@ -27,9 +27,7 @@ final class LocationLogBackend {
                 throw new IllegalStateException(LocationLog.SQLITE_DISABLED_MESSAGE, exception);
             }
         }
-        return new LocationLogFileStorage(
-            new File(context.getNoBackupFilesDir(), "capgo_background_geolocation_location_log.txt")
-        );
+        return new LocationLogFileStorage(new File(context.getNoBackupFilesDir(), "capgo_background_geolocation_location_log.txt"));
     }
 
     void open() {
