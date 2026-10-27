@@ -109,7 +109,7 @@ function updatePackageSwift(enabled: boolean): void {
         //     swiftSettings: [.define("BGGEO_LOCATION_LOG_SQLITE")],
         //     linkerSettings: [.linkedLibrary("sqlite3")]),`;
   const sqliteTargetPattern =
-    /\/\/ \.target\(\s*\n\s*\/\/\s*name: "CapgoBackgroundGeolocationLocationLogSqlite",[\s\S]*?\/\/\s*swiftSettings: \[\.define\("BGGEO_LOCATION_LOG_SQLITE"\)\]\),|\.target\(\s*\n\s*name: "CapgoBackgroundGeolocationLocationLogSqlite",[\s\S]*?swiftSettings: \[\.define\("BGGEO_LOCATION_LOG_SQLITE"\)\]\),/;
+    /(?:\/\/ \.target\([\s\S]*?\/\/\s*linkerSettings: \[\.linkedLibrary\("sqlite3"\)\]\),|\.target\(\s*\n\s*name: "CapgoBackgroundGeolocationLocationLogSqlite",[\s\S]*?linkerSettings: \[\.linkedLibrary\("sqlite3"\)\]\),)/;
   content = content.replace(sqliteTargetPattern, enabled ? sqliteTargetEnabled : sqliteTargetDisabled);
 
   fs.writeFileSync(packageSwiftPath, content, 'utf8');

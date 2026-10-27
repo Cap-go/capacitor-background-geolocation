@@ -18,11 +18,11 @@ let package = Package(
             dependencies: [
                 .product(name: "Capacitor", package: "capacitor-swift-pm"),
                 .product(name: "Cordova", package: "capacitor-swift-pm"),
-                // "CapgoBackgroundGeolocationLocationLogSqlite",  // Disabled via config (compileOnly)
+                // "CapgoBackgroundGeolocationLocationLogSqlite",
             ],
             path: "ios/Sources/CapgoBackgroundGeolocationPlugin",
             swiftSettings: [
-                // .define("BGGEO_LOCATION_LOG_SQLITE"),  // Disabled via config (compileOnly)
+                // .define("BGGEO_LOCATION_LOG_SQLITE"),
             ]),
         // .target(
         //     name: "CapgoBackgroundGeolocationLocationLogSqlite",
@@ -35,7 +35,7 @@ let package = Package(
             dependencies: ["CapgoBackgroundGeolocationPlugin"],
             path: "ios/Tests/CapgoBackgroundGeolocationPluginTests",
             swiftSettings: [
-                // .define("BGGEO_LOCATION_LOG_SQLITE"),  // Disabled via config (compileOnly)
+                // .define("BGGEO_LOCATION_LOG_SQLITE"),
             ])
     ]
 )
