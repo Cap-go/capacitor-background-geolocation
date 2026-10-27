@@ -99,7 +99,7 @@ final class LocationLogFileStorage: LocationLogStorage {
     }
 
     private func syncParentDirectory(of url: URL) {
-        let directoryDescriptor = open(url.deletingLastPathComponent().path, O_RDONLY)
+        let directoryDescriptor = Darwin.open(url.deletingLastPathComponent().path, O_RDONLY)
         if directoryDescriptor >= 0 {
             fsync(directoryDescriptor)
             close(directoryDescriptor)
