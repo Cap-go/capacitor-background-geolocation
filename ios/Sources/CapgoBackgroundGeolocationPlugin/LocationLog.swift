@@ -64,7 +64,7 @@ final class LocationLog {
 
     func complete(id: Int64, httpStatus: Int?, error: Error?) {
         queue.async {
-            storage.complete(id: id, httpStatus: httpStatus, error: error)
+            self.storage.complete(id: id, httpStatus: httpStatus, error: error)
         }
     }
 }
