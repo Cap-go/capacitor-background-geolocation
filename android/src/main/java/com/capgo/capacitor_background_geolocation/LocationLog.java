@@ -37,6 +37,10 @@ final class LocationLog {
         instance = null;
     }
 
+    static synchronized void resetInstance() {
+        instance = null;
+    }
+
     LocationLog(LocationLogBackend backend) {
         this.backend = backend;
     }

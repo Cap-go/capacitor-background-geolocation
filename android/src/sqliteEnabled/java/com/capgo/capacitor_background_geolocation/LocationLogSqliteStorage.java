@@ -21,7 +21,7 @@ final class LocationLogSqliteStorage extends SQLiteOpenHelper implements Locatio
     private static final int DATABASE_VERSION = 1;
     private static final String TABLE = "location_log";
 
-    LocationLogSqliteStorage(Context context) {
+    public LocationLogSqliteStorage(Context context) {
         super(context.getApplicationContext(), DATABASE_NAME, null, DATABASE_VERSION);
     }
 

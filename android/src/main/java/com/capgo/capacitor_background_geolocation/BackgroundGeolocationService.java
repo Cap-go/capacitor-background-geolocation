@@ -270,7 +270,8 @@ public class BackgroundGeolocationService extends Service {
         }
         startWatchdog();
         if (locationLogEnabled) {
-            if (!LocationStore.getLocationLogSqlite(getApplicationContext())) {
+            boolean locationLogSqlite = LocationStore.getLocationLogSqlite(getApplicationContext());
+            if (!locationLogSqlite || nativePostUrl == null) {
                 logLocation(location);
             }
         }
@@ -296,8 +297,8 @@ public class BackgroundGeolocationService extends Service {
         }
         Context context = getApplicationContext();
         JSONObject payload = locationToJson(location);
-        long logId = LocationStore.logLocationForNativePost(context, payload);
         postExecutor.execute(() -> {
+            long logId = LocationStore.logLocationForNativePost(context, payload);
             try {
                 LocationStore.sendLocation(context, payload, logId);
             } catch (Exception e) {
@@ -456,6 +457,7 @@ public class BackgroundGeolocationService extends Service {
                 locationLogMaxEntries,
                 locationLogSqlite
             );
+            LocationLog.resetInstance();
             if (locationLog && locationLogSqlite) {
                 LocationLog.EXECUTOR.execute(() -> LocationLog.getInstance(getApplicationContext()).open());
             }

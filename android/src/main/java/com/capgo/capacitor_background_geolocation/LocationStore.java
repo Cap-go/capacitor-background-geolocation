@@ -57,7 +57,16 @@ final class LocationStore {
     ) {
         SharedPreferences.Editor editor = prefs(context).edit();
         if (url == null || url.isEmpty()) {
-            editor.clear();
+            editor
+                .remove(KEY_ENABLED)
+                .remove(KEY_URL)
+                .remove(KEY_TITLE)
+                .remove(KEY_MESSAGE)
+                .remove(KEY_DISTANCE_FILTER)
+                .remove(KEY_HEADERS)
+                .remove(KEY_MIN_INTERVAL_MS)
+                .remove(KEY_NETWORK_FALLBACK)
+                .remove(KEY_LAST_POST_TIME);
         } else {
             editor
                 .putBoolean(KEY_ENABLED, true)
@@ -68,12 +77,13 @@ final class LocationStore {
                 .putString(KEY_HEADERS, headersToJson(headers))
                 .putLong(KEY_MIN_INTERVAL_MS, Math.max(0L, minIntervalMs))
                 .putBoolean(KEY_NETWORK_FALLBACK, networkFallback)
-                .putBoolean(KEY_LOCATION_LOG, locationLog)
-                .putInt(KEY_LOCATION_LOG_MAX_ENTRIES, locationLogMaxEntries)
-                .putBoolean(KEY_LOCATION_LOG_SQLITE, locationLogSqlite)
                 .remove(KEY_LAST_POST_TIME);
         }
-        editor.apply();
+        editor
+            .putBoolean(KEY_LOCATION_LOG, locationLog)
+            .putInt(KEY_LOCATION_LOG_MAX_ENTRIES, locationLogMaxEntries)
+            .putBoolean(KEY_LOCATION_LOG_SQLITE, locationLogSqlite)
+            .apply();
     }
 
     static void saveHeaders(Context context, Map<String, String> headers) {

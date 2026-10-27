@@ -7,6 +7,7 @@ const PLUGIN_ROOT = process.cwd();
 const CONFIG_JSON = process.env.CAPACITOR_CONFIG;
 const gradlePropertiesPath = path.join(PLUGIN_ROOT, 'android', 'gradle.properties');
 const podspecPath = path.join(PLUGIN_ROOT, 'CapgoBackgroundGeolocation.podspec');
+const packageSwiftPath = path.join(PLUGIN_ROOT, 'Package.swift');
 
 function readLocationLogSqliteEnabled(): boolean {
   if (!CONFIG_JSON) {
@@ -54,22 +55,67 @@ function updatePodspec(enabled: boolean): void {
   }
   let content = fs.readFileSync(podspecPath, 'utf8');
   const active =
-    "  s.source_files += 'ios/SqliteLocationLog/**/*.swift'\n  s.pod_target_xcconfig = { 'OTHER_SWIFT_FLAGS' => '$(inherited) -DBGGEO_LOCATION_LOG_SQLITE' }";
+    "  s.source_files += 'ios/SqliteLocationLog/**/*.swift'\n  s.pod_target_xcconfig = { 'OTHER_SWIFT_FLAGS' => '$(inherited) -DBGGEO_LOCATION_LOG_SQLITE' }\n  s.libraries = 'sqlite3'";
   const disabled =
-    "  # s.source_files += 'ios/SqliteLocationLog/**/*.swift'  # Disabled via config (compileOnly)\n  # s.pod_target_xcconfig = { 'OTHER_SWIFT_FLAGS' => '$(inherited) -DBGGEO_LOCATION_LOG_SQLITE' }  # Disabled via config (compileOnly)";
-  const pattern =
-    /(#[ \t]*)?s\.source_files \+= 'ios\/SqliteLocationLog\/\*\*\/\*\.swift'.*\n(#[ \t]*)?s\.pod_target_xcconfig = \{ 'OTHER_SWIFT_FLAGS' => '\$\(inherited\) -DBGGEO_LOCATION_LOG_SQLITE' \}.*\n?/;
-  if (pattern.test(content)) {
-    content = content.replace(pattern, enabled ? active + '\n' : disabled + '\n');
+    "  # s.source_files += 'ios/SqliteLocationLog/**/*.swift'  # Disabled via config (compileOnly)\n  # s.pod_target_xcconfig = { 'OTHER_SWIFT_FLAGS' => '$(inherited) -DBGGEO_LOCATION_LOG_SQLITE' }  # Disabled via config (compileOnly)\n  # s.libraries = 'sqlite3'  # Disabled via config (compileOnly)";
+  const sqliteBlockPattern =
+    /(  # s\.source_files \+= 'ios\/SqliteLocationLog\/\*\*\/\*\.swift'.*\n  # s\.pod_target_xcconfig.*\n  # s\.libraries = 'sqlite3'.*\n|  s\.source_files \+= 'ios\/SqliteLocationLog\/\*\*\/\*\.swift'.*\n  s\.pod_target_xcconfig.*\n  s\.libraries = 'sqlite3'.*\n)(?=end)/;
+  if (sqliteBlockPattern.test(content)) {
+    content = content.replace(sqliteBlockPattern, `${enabled ? active : disabled}\n`);
   } else {
-    content = content.replace(
-      /s\.swift_version = '5\.1'\n/,
-      `s.swift_version = '5.1'\n${enabled ? active : disabled}\n`,
-    );
+    content = content.replace(/s\.swift_version = '5\.1'\n/, `s.swift_version = '5.1'\n${enabled ? active : disabled}\n`);
   }
   fs.writeFileSync(podspecPath, content, 'utf8');
+}
+
+function updatePackageSwift(enabled: boolean): void {
+  if (!fs.existsSync(packageSwiftPath)) {
+    return;
+  }
+  let content = fs.readFileSync(packageSwiftPath, 'utf8');
+  const swiftCommentPrefix = '(?:\\/\\/[ \\t]*)*';
+  const swiftTrailingComment = '(?:[ \\t]*\\/\\/[^\\r\\n]*)?';
+
+  const replacements: { pattern: RegExp; enabled: string; disabled: string }[] = [
+    {
+      pattern: new RegExp(`${swiftCommentPrefix}"CapgoBackgroundGeolocationLocationLogSqlite",${swiftTrailingComment}`),
+      enabled: '"CapgoBackgroundGeolocationLocationLogSqlite",',
+      disabled: '// "CapgoBackgroundGeolocationLocationLogSqlite",  // Disabled via config (compileOnly)',
+    },
+    {
+      pattern: new RegExp(
+        `${swiftCommentPrefix}\\.define\\("BGGEO_LOCATION_LOG_SQLITE"\\),${swiftTrailingComment}`,
+        'g',
+      ),
+      enabled: '.define("BGGEO_LOCATION_LOG_SQLITE"),',
+      disabled: '// .define("BGGEO_LOCATION_LOG_SQLITE"),  // Disabled via config (compileOnly)',
+    },
+  ];
+
+  for (const replacement of replacements) {
+    content = content.replace(replacement.pattern, enabled ? replacement.enabled : replacement.disabled);
+  }
+
+  const sqliteTargetEnabled = `.target(
+            name: "CapgoBackgroundGeolocationLocationLogSqlite",
+            dependencies: ["CapgoBackgroundGeolocationPlugin"],
+            path: "ios/SqliteLocationLog",
+            linkerSettings: [.linkedLibrary("sqlite3")],
+            swiftSettings: [.define("BGGEO_LOCATION_LOG_SQLITE")]),`;
+  const sqliteTargetDisabled = `// .target(
+        //     name: "CapgoBackgroundGeolocationLocationLogSqlite",
+        //     dependencies: ["CapgoBackgroundGeolocationPlugin"],
+        //     path: "ios/SqliteLocationLog",
+        //     linkerSettings: [.linkedLibrary("sqlite3")],
+        //     swiftSettings: [.define("BGGEO_LOCATION_LOG_SQLITE")]),`;
+  const sqliteTargetPattern =
+    /\/\/ \.target\(\s*\n\s*\/\/\s*name: "CapgoBackgroundGeolocationLocationLogSqlite",[\s\S]*?\/\/\s*swiftSettings: \[\.define\("BGGEO_LOCATION_LOG_SQLITE"\)\]\),|\.target\(\s*\n\s*name: "CapgoBackgroundGeolocationLocationLogSqlite",[\s\S]*?swiftSettings: \[\.define\("BGGEO_LOCATION_LOG_SQLITE"\)\]\),/;
+  content = content.replace(sqliteTargetPattern, enabled ? sqliteTargetEnabled : sqliteTargetDisabled);
+
+  fs.writeFileSync(packageSwiftPath, content, 'utf8');
 }
 
 const enabled = readLocationLogSqliteEnabled();
 updateGradleProperties(enabled);
 updatePodspec(enabled);
+updatePackageSwift(enabled);

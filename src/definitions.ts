@@ -694,6 +694,26 @@ export interface LocationLogEntry extends Location {
    * @example 4211
    */
   id: number;
+  /**
+   * Delivery status when using the SQLite location log backend.
+   *
+   * @since 8.5.0
+   * @example "sent"
+   */
+  status?: 'pending' | 'sent' | 'failed';
+  /**
+   * HTTP status from the native POST when `status` is `sent` or `failed`.
+   *
+   * @since 8.5.0
+   * @example 200
+   */
+  httpStatus?: number | null;
+  /**
+   * Error message when `status` is `failed`.
+   *
+   * @since 8.5.0
+   */
+  error?: string | null;
 }
 
 /**

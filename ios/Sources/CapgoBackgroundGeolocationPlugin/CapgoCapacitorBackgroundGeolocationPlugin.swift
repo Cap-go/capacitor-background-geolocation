@@ -88,6 +88,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     private var lastPostedLocationTime: Date?
     private var locationLogEnabled: Bool = false
     private var locationLogMaxEntries: Int = LocationLog.defaultMaxEntries
+    private var locationLogSqliteEnabled: Bool = false
 
     private let geofenceUrlKey = "CapgoBackgroundGeolocation.geofence.url"
     private let geofenceHeadersKey = "CapgoBackgroundGeolocation.geofence.headers"
@@ -132,13 +133,22 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             self.lastPostedLocationTime = nil
             self.locationLogEnabled = call.getBool("locationLog") ?? false
             self.locationLogMaxEntries = max(1, call.getInt("locationLogMaxEntries") ?? LocationLog.defaultMaxEntries)
+            let sqliteRequested = call.getBool("locationLogSqlite") ?? false
             #if !BGGEO_LOCATION_LOG_SQLITE
-            if call.getBool("locationLogSqlite") == true {
+            if sqliteRequested {
                 return call.reject(
                     "SQLite location log is disabled. Set plugins.BackgroundGeolocation.locationLogSqlite to true in capacitor.config and run npx cap sync."
                 )
             }
+            self.locationLogSqliteEnabled = false
+            #else
+            self.locationLogSqliteEnabled = sqliteRequested
+            LocationLogPreferences.setLocationLogSqlite(sqliteRequested)
             #endif
+            LocationLog.resetShared()
+            if self.locationLogEnabled && self.locationLogSqliteEnabled {
+                LocationLog.shared.open()
+            }
             // Create fresh location manager and initialize date
             self.locationManager = CLLocationManager()
             guard let manager = self.locationManager else {
@@ -491,7 +501,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         guard isWholeNumberOrAbsent(call, "afterId") else {
             return call.reject("afterId must be a number")
         }
-        let afterId = call.getDouble("afterId").map { Int64($0.rounded()) } ?? 0
+        let afterId = wholeInt64(from: call, key: "afterId") ?? 0
         let limit = min(LocationLog.maxLimit, max(1, call.getInt("limit") ?? LocationLog.defaultLimit))
         DispatchQueue.global(qos: .userInitiated).async {
             do {
@@ -506,7 +516,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         guard isWholeNumberOrAbsent(call, "upToId") else {
             return call.reject("upToId must be a number")
         }
-        let upToId = call.getDouble("upToId").map { Int64($0.rounded()) }
+        let upToId = wholeInt64(from: call, key: "upToId")
         DispatchQueue.global(qos: .userInitiated).async {
             do {
                 try LocationLog.shared.clear(upToId: upToId)
@@ -521,6 +531,12 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         guard call.options[key] != nil else { return true }
         guard let value = call.getDouble(key) else { return false }
         return Int64(exactly: value.rounded()) != nil
+    }
+
+    private func wholeInt64(from call: CAPPluginCall, key: String) -> Int64? {
+        guard call.options[key] != nil else { return nil }
+        guard let value = call.getDouble(key) else { return nil }
+        return Int64(exactly: value.rounded())
     }
 
     private func ensureGeofenceLocationManager() -> CLLocationManager {
@@ -723,8 +739,14 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
               let body = try? JSONSerialization.data(withJSONObject: data) else {
             return
         }
+        let logId: Int64?
+        if locationLogEnabled && locationLogSqliteEnabled && LocationLog.shared.tracksPostOutcomes {
+            logId = LocationLog.shared.insert(data, maxEntries: locationLogMaxEntries)
+        } else {
+            logId = nil
+        }
         lastPostedLocationTime = location.timestamp
-        postJson(body, to: backendUrl, headers: locationHeaders, taskName: "CapgoLocationUpdate")
+        postJson(body, to: backendUrl, headers: locationHeaders, taskName: "CapgoLocationUpdate", logId: logId)
     }
 
     private func stringHeaders(from object: [String: Any]?) -> [String: String] {
@@ -742,7 +764,13 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         return headers
     }
 
-    private func postJson(_ body: Data, to url: URL, headers: [String: String], taskName: String) {
+    private func postJson(
+        _ body: Data,
+        to url: URL,
+        headers: [String: String],
+        taskName: String,
+        logId: Int64? = nil
+    ) {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -759,7 +787,11 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
                 backgroundTask = .invalid
             }
         }
-        URLSession.shared.dataTask(with: request) { _, _, _ in
+        URLSession.shared.dataTask(with: request) { _, response, error in
+            if let logId {
+                let status = (response as? HTTPURLResponse)?.statusCode
+                LocationLog.shared.complete(id: logId, httpStatus: status, error: error)
+            }
             if backgroundTask != .invalid {
                 UIApplication.shared.endBackgroundTask(backgroundTask)
                 backgroundTask = .invalid
@@ -928,9 +960,12 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         }
 
         if locationLogEnabled {
-            var entry = locationPayload(location)
-            entry["source"] = nil
-            LocationLog.shared.append(entry, maxEntries: locationLogMaxEntries)
+            let skipAppend = locationLogSqliteEnabled && locationBackendUrl != nil
+            if !skipAppend {
+                var entry = locationPayload(location)
+                entry["source"] = nil
+                LocationLog.shared.append(entry, maxEntries: locationLogMaxEntries)
+            }
         }
 
         // Native delivery does not depend on the bridge, so it keeps working

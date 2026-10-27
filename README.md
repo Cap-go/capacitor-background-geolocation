@@ -220,6 +220,10 @@ plugins: {
 
 Then pass `locationLogSqlite: true` in `start()` together with `locationLog: true`. If you request `locationLogSqlite` without enabling it in `capacitor.config`, `start()` rejects with a clear error.
 
+On iOS, `npx cap sync` toggles the optional `ios/SqliteLocationLog` sources in the podspec and the `CapgoBackgroundGeolocationLocationLogSqlite` SPM target in `Package.swift` (default checkout does not link `sqlite3`). On Android, sync sets `backgroundGeolocation.locationLogSqlite.include` in `android/gradle.properties`.
+
+To confirm the default dependency graph excludes SQLite: `cd android && ./gradlew :dependencies --configuration releaseCompileClasspath` (no `sqliteEnabled` sources), and in `Package.swift` / `CapgoBackgroundGeolocation.podspec` the SQLite lines stay commented until sync enables them.
+
 ## Documentation
 
 The most complete doc is available here: https://capgo.app/docs/plugins/background-geolocation/
@@ -805,9 +809,12 @@ Result returned by {@link BackgroundGeolocationPlugin.getLocationLog}.
 
 A location kept in the location log.
 
-| Prop     | Type                | Description                                                                                                                                                                                                                                                                                      | Since |
-| -------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----- |
-| **`id`** | <code>number</code> | Identifier of the entry. Identifiers increase with every location and are never reused, so the last one read works as a cursor for {@link <a href="#getlocationlogoptions">GetLocationLogOptions.afterId</a>} and {@link <a href="#clearlocationlogoptions">ClearLocationLogOptions.upToId</a>}. | 8.5.0 |
+| Prop             | Type                                         | Description                                                                                                                                                                                                                                                                                      | Since |
+| ---------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----- |
+| **`id`**         | <code>number</code>                          | Identifier of the entry. Identifiers increase with every location and are never reused, so the last one read works as a cursor for {@link <a href="#getlocationlogoptions">GetLocationLogOptions.afterId</a>} and {@link <a href="#clearlocationlogoptions">ClearLocationLogOptions.upToId</a>}. | 8.5.0 |
+| **`status`**     | <code>'pending' \| 'sent' \| 'failed'</code> | Delivery status when using the SQLite location log backend.                                                                                                                                                                                                                                      | 8.5.0 |
+| **`httpStatus`** | <code>number \| null</code>                  | HTTP status from the native POST when `status` is `sent` or `failed`.                                                                                                                                                                                                                            | 8.5.0 |
+| **`error`**      | <code>string \| null</code>                  | Error message when `status` is `failed`.                                                                                                                                                                                                                                                         | 8.5.0 |
 
 
 #### GetLocationLogOptions

@@ -22,7 +22,9 @@ final class LocationLogBackend {
         if (BuildConfig.LOCATION_LOG_SQLITE && LocationStore.getLocationLogSqlite(context)) {
             try {
                 Class<?> type = Class.forName("com.capgo.capacitor_background_geolocation.LocationLogSqliteStorage");
-                return (LocationLogStorage) type.getConstructor(Context.class).newInstance(context);
+                var constructor = type.getDeclaredConstructor(Context.class);
+                constructor.setAccessible(true);
+                return (LocationLogStorage) constructor.newInstance(context);
             } catch (ReflectiveOperationException exception) {
                 throw new IllegalStateException(LocationLog.SQLITE_DISABLED_MESSAGE, exception);
             }
