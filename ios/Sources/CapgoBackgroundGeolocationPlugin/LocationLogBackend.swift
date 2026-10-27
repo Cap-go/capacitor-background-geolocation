@@ -1,7 +1,4 @@
 import Foundation
-#if BGGEO_LOCATION_LOG_SQLITE
-import CapgoBackgroundGeolocationLocationLogSqlite
-#endif
 
 enum LocationLogBackend {
     static func makeStorage() -> LocationLogStorage {

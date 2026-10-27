@@ -1,9 +1,8 @@
-import CapgoBackgroundGeolocationPlugin
 import Foundation
 import SQLite3
 
-public enum LocationLogSqliteStorage {
-    public static func make() -> LocationLogStorage {
+enum LocationLogSqliteStorage {
+    static func make() -> LocationLogStorage {
         LocationLogSqliteStorageImpl()
     }
 }

@@ -220,7 +220,7 @@ plugins: {
 
 Then pass `locationLogSqlite: true` in `start()` together with `locationLog: true`. If you request `locationLogSqlite` without enabling it in `capacitor.config`, `start()` rejects with a clear error.
 
-On iOS, `npx cap sync` toggles the optional `ios/SqliteLocationLog` sources in the podspec and the `CapgoBackgroundGeolocationLocationLogSqlite` SPM target in `Package.swift` (default checkout does not link `sqlite3`). On Android, sync sets `backgroundGeolocation.locationLogSqlite.include` in `android/gradle.properties`.
+On iOS, `npx cap sync` toggles the optional `ios/SqliteLocationLog` sources in the podspec and adds those sources plus `sqlite3` to the main SPM target in `Package.swift` (default checkout does not compile or link SQLite). On Android, sync sets `backgroundGeolocation.locationLogSqlite.include` in `android/gradle.properties`.
 
 To confirm the default dependency graph excludes SQLite: `cd android && ./gradlew :dependencies --configuration releaseCompileClasspath` (no `sqliteEnabled` sources), and in `Package.swift` / `CapgoBackgroundGeolocation.podspec` the SQLite lines stay commented until sync enables them.
 

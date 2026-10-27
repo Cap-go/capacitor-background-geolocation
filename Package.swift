@@ -17,19 +17,15 @@ let package = Package(
             name: "CapgoBackgroundGeolocationPlugin",
             dependencies: [
                 .product(name: "Capacitor", package: "capacitor-swift-pm"),
-                .product(name: "Cordova", package: "capacitor-swift-pm"),
-                // "CapgoBackgroundGeolocationLocationLogSqlite",
+                .product(name: "Cordova", package: "capacitor-swift-pm")
             ],
-            path: "ios/Sources/CapgoBackgroundGeolocationPlugin",
+            path: "ios",
+            sources: ["Sources/CapgoBackgroundGeolocationPlugin"],
             swiftSettings: [
                 // .define("BGGEO_LOCATION_LOG_SQLITE"),
-            ]),
-        // .target(
-        //     name: "CapgoBackgroundGeolocationLocationLogSqlite",
-        //     dependencies: ["CapgoBackgroundGeolocationPlugin"],
-        //     path: "ios/SqliteLocationLog",
-        //     swiftSettings: [.define("BGGEO_LOCATION_LOG_SQLITE")],
-        //     linkerSettings: [.linkedLibrary("sqlite3")]),
+            ],
+            // linkerSettings: [.linkedLibrary("sqlite3")],
+        ),
         .testTarget(
             name: "CapgoBackgroundGeolocationPluginTests",
             dependencies: ["CapgoBackgroundGeolocationPlugin"],
