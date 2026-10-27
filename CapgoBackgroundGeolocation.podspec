@@ -14,4 +14,6 @@ Pod::Spec.new do |s|
   s.ios.deployment_target = '15.0'
   s.dependency 'Capacitor'
   s.swift_version = '5.1'
+  # s.source_files += 'ios/SqliteLocationLog/**/*.swift'  # Disabled via config (compileOnly)
+  # s.pod_target_xcconfig = { 'OTHER_SWIFT_FLAGS' => '$(inherited) -DBGGEO_LOCATION_LOG_SQLITE' }  # Disabled via config (compileOnly)
 end

@@ -22,6 +22,7 @@ apply plugin: 'com.android.library'
 // The plugin version is read from package.json at build time so the value
 // returned by getPluginVersion() can never drift from the published package.
 def pluginVersion = new groovy.json.JsonSlurper().parse(file('../package.json')).version
+def includeLocationLogSqlite = project.findProperty('backgroundGeolocation.locationLogSqlite.include') ?: 'false'
 
 android {
     namespace = "com.capgo.capacitor_background_geolocation"
@@ -33,9 +34,22 @@ android {
         versionName "1.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "String", "PLUGIN_VERSION", "\"${pluginVersion}\""
+        buildConfigField "boolean", "LOCATION_LOG_SQLITE", includeLocationLogSqlite == 'true' ? 'true' : 'false'
     }
     buildFeatures {
         buildConfig = true
+    }
+    sourceSets {
+        main {
+            if (includeLocationLogSqlite == 'true') {
+                java.srcDirs += 'src/sqliteEnabled/java'
+            }
+        }
+        test {
+            if (includeLocationLogSqlite == 'true') {
+                java.srcDirs += 'src/sqliteTest/java'
+            }
+        }
     }
     buildTypes {
         release {
@@ -65,6 +79,8 @@ dependencies {
     implementation "androidx.work:work-runtime:$androidxWorkRuntimeVersion"
     testImplementation "junit:junit:$junitVersion"
     testImplementation "org.json:json:20260814"
+    testImplementation "org.robolectric:robolectric:4.16"
+    testImplementation "androidx.test:core:1.6.1"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation "com.google.android.gms:play-services-location:$playServicesLocationVersion"

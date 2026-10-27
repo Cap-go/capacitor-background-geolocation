@@ -25,7 +25,7 @@ public class LocationLogTest {
     @Before
     public void setUp() {
         file = new File(folder.getRoot(), "location_log.txt");
-        log = new LocationLog(file);
+        log = new LocationLog(new LocationLogBackend(new LocationLogFileStorage(file)));
     }
 
     private static JSONObject location(long time) throws JSONException {
@@ -108,10 +108,10 @@ public class LocationLogTest {
     public void testIdentifiersAreNotReusedAfterTheLogWasCleared() throws Exception {
         appendLocations(2, 10);
 
-        log = new LocationLog(file);
+        log = new LocationLog(new LocationLogBackend(new LocationLogFileStorage(file)));
         log.clear(null);
         assertEquals(0, log.read(0, 10).length());
-        log = new LocationLog(file);
+        log = new LocationLog(new LocationLogBackend(new LocationLogFileStorage(file)));
         appendLocations(1, 10);
 
         assertArrayEquals(new long[] { 3 }, ids(log.read(0, 10)));
@@ -134,7 +134,7 @@ public class LocationLogTest {
     public void testALogThatIsOpenedAgainRemovesTheOldestTenthAtTheSameSize() throws Exception {
         appendLocations(19, 20);
 
-        log = new LocationLog(file);
+        log = new LocationLog(new LocationLogBackend(new LocationLogFileStorage(file)));
         appendLocations(1, 20);
         assertEquals(20, log.read(0, 30).length());
 

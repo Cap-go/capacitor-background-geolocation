@@ -236,6 +236,16 @@ export interface StartOptions {
    * @example 500000
    */
   locationLogMaxEntries?: number;
+  /**
+   * Use the optional SQLite location log backend instead of the default file log.
+   *
+   * Requires `plugins.BackgroundGeolocation.locationLogSqlite: true` in
+   * `capacitor.config` and `npx cap sync` so native SQLite code is included.
+   *
+   * @since 8.5.0
+   * @default false
+   */
+  locationLogSqlite?: boolean;
 }
 
 /**

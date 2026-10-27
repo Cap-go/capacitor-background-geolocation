@@ -132,6 +132,13 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             self.lastPostedLocationTime = nil
             self.locationLogEnabled = call.getBool("locationLog") ?? false
             self.locationLogMaxEntries = max(1, call.getInt("locationLogMaxEntries") ?? LocationLog.defaultMaxEntries)
+            #if !BGGEO_LOCATION_LOG_SQLITE
+            if call.getBool("locationLogSqlite") == true {
+                return call.reject(
+                    "SQLite location log is disabled. Set plugins.BackgroundGeolocation.locationLogSqlite to true in capacitor.config and run npx cap sync."
+                )
+            }
+            #endif
             // Create fresh location manager and initialize date
             self.locationManager = CLLocationManager()
             guard let manager = self.locationManager else {

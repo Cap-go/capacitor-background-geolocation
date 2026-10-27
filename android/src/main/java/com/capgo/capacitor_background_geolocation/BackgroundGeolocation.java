@@ -132,6 +132,10 @@ public class BackgroundGeolocation extends Plugin {
     }
 
     private void proceedWithStart(PluginCall call) {
+        if (call.getBoolean("locationLogSqlite", false) && !BuildConfig.LOCATION_LOG_SQLITE) {
+            call.reject(LocationLog.SQLITE_DISABLED_MESSAGE);
+            return;
+        }
         if (call.getBoolean("stale", false)) {
             fetchLastLocation(call);
         }
@@ -154,7 +158,8 @@ public class BackgroundGeolocation extends Plugin {
                 longOptionFromCall(call, "minIntervalMs", 0L),
                 call.getBoolean("networkFallback", false),
                 call.getBoolean("locationLog", false),
-                Math.max(1, call.getInt("locationLogMaxEntries", LocationLog.DEFAULT_MAX_ENTRIES))
+                Math.max(1, call.getInt("locationLogMaxEntries", LocationLog.DEFAULT_MAX_ENTRIES)),
+                call.getBoolean("locationLogSqlite", false)
             );
         });
         serviceStartedFuture.exceptionally((throwable) -> {

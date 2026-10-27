@@ -270,7 +270,9 @@ public class BackgroundGeolocationService extends Service {
         }
         startWatchdog();
         if (locationLogEnabled) {
-            logLocation(location);
+            if (!LocationStore.getLocationLogSqlite(getApplicationContext())) {
+                logLocation(location);
+            }
         }
         if (nativePostUrl != null) {
             postLocationNatively(location);
@@ -294,9 +296,10 @@ public class BackgroundGeolocationService extends Service {
         }
         Context context = getApplicationContext();
         JSONObject payload = locationToJson(location);
+        long logId = LocationStore.logLocationForNativePost(context, payload);
         postExecutor.execute(() -> {
             try {
-                LocationStore.sendLocation(context, payload);
+                LocationStore.sendLocation(context, payload, logId);
             } catch (Exception e) {
                 Logger.error("Native location POST failed", e);
             }
@@ -420,7 +423,8 @@ public class BackgroundGeolocationService extends Service {
             final long minIntervalMs,
             final boolean networkFallback,
             final boolean locationLog,
-            final int locationLogMaxEntries
+            final int locationLogMaxEntries,
+            final boolean locationLogSqlite
         ) {
             // The plugin starts this service with startForegroundService(). If the setup
             // below throws (for example 'provider "gps" does not exist' on a device without
@@ -449,8 +453,12 @@ public class BackgroundGeolocationService extends Service {
                 currentMinIntervalMs,
                 networkFallback,
                 locationLog,
-                locationLogMaxEntries
+                locationLogMaxEntries,
+                locationLogSqlite
             );
+            if (locationLog && locationLogSqlite) {
+                LocationLog.EXECUTOR.execute(() -> LocationLog.getInstance(getApplicationContext()).open());
+            }
 
             // The service may already be running (for example after a sticky
             // restart), so drop any previous listener before registering a new one.
