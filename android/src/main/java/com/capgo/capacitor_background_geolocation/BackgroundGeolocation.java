@@ -614,7 +614,7 @@ public class BackgroundGeolocation extends Plugin {
 
     @PluginMethod
     public void getLocationLog(PluginCall call) {
-        if (!isNumberOrAbsent(call, "afterId")) {
+        if (!isWholeNumberOrAbsent(call, "afterId")) {
             call.reject("afterId must be a number");
             return;
         }
@@ -634,12 +634,12 @@ public class BackgroundGeolocation extends Plugin {
 
     @PluginMethod
     public void clearLocationLog(PluginCall call) {
-        if (!isNumberOrAbsent(call, "upToId")) {
+        if (!isWholeNumberOrAbsent(call, "upToId")) {
             call.reject("upToId must be a number");
             return;
         }
         Context context = getContext();
-        Long upToId = call.getData().has("upToId") ? call.getData().optLong("upToId") : null;
+        Long upToId = nullableWholeLongFromCall(call, "upToId");
         LocationLog.EXECUTOR.execute(() -> {
             try {
                 LocationLog.getInstance(context).clear(upToId);
@@ -769,6 +769,33 @@ public class BackgroundGeolocation extends Plugin {
 
     static boolean isNumberOrAbsent(PluginCall call, String key) {
         return !call.getData().has(key) || call.getData().opt(key) instanceof Number;
+    }
+
+    static boolean isWholeNumberOrAbsent(PluginCall call, String key) {
+        if (!call.getData().has(key)) {
+            return true;
+        }
+        Object value = call.getData().opt(key);
+        if (!(value instanceof Number)) {
+            return false;
+        }
+        double number = ((Number) value).doubleValue();
+        if (!Double.isFinite(number)) {
+            return false;
+        }
+        double rounded = Math.rint(number);
+        if (number != rounded) {
+            return false;
+        }
+        long asLong = (long) rounded;
+        return (double) asLong == rounded;
+    }
+
+    static Long nullableWholeLongFromCall(PluginCall call, String key) {
+        if (!call.getData().has(key)) {
+            return null;
+        }
+        return (long) Math.rint(((Number) call.getData().opt(key)).doubleValue());
     }
 
     private static Map<String, String> headersFromCall(PluginCall call) {

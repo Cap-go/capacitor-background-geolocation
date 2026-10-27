@@ -247,4 +247,18 @@ public class BackgroundGeolocationUnitTest {
         assertFalse(BackgroundGeolocation.isNumberOrAbsent(call, "upToId"));
         assertFalse(BackgroundGeolocation.isNumberOrAbsent(call, "limit"));
     }
+
+    @Test
+    public void testIsWholeNumberOrAbsent() {
+        JSObject data = new JSObject();
+        data.put("afterId", 4211);
+        data.put("upToId", 4211.5);
+        data.put("fractional", 1.2);
+        PluginCall call = new PluginCall(null, "BackgroundGeolocation", "test-callback", "clearLocationLog", data);
+
+        assertTrue(BackgroundGeolocation.isWholeNumberOrAbsent(call, "afterId"));
+        assertTrue(BackgroundGeolocation.isWholeNumberOrAbsent(call, "missing"));
+        assertFalse(BackgroundGeolocation.isWholeNumberOrAbsent(call, "upToId"));
+        assertFalse(BackgroundGeolocation.isWholeNumberOrAbsent(call, "fractional"));
+    }
 }
