@@ -87,6 +87,7 @@ final class LocationLog {
             values.isExcludedFromBackup = true
             try? directory.setResourceValues(values)
             try Data().write(to: url, options: LocationLog.protection)
+            syncParentDirectory(of: url)
         }
         let handle = try FileHandle(forWritingTo: url)
         defer { try? handle.close() }
@@ -130,7 +131,16 @@ final class LocationLog {
         guard rename(rewritten.path, url.path) == 0 else {
             throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO)
         }
+        syncParentDirectory(of: url)
         count = kept.count
+    }
+
+    private func syncParentDirectory(of url: URL) {
+        let directoryDescriptor = open(url.deletingLastPathComponent().path, O_RDONLY)
+        if directoryDescriptor >= 0 {
+            fsync(directoryDescriptor)
+            close(directoryDescriptor)
+        }
     }
 
     // The lines of the file, or none if there is no file yet.

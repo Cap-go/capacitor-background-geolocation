@@ -1,10 +1,14 @@
 package com.capgo.capacitor_background_geolocation;
 
 import android.content.Context;
+import android.system.ErrnoException;
+import android.system.Os;
+import android.system.OsConstants;
 import com.getcapacitor.JSArray;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.File;
+import java.io.FileDescriptor;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -146,7 +150,24 @@ final class LocationLog {
             rewritten.delete();
             throw new IOException("Could not replace " + file);
         }
+        syncParentDirectory(file.getParentFile());
         count = kept;
+    }
+
+    private static void syncParentDirectory(File directory) throws IOException {
+        if (directory == null) {
+            return;
+        }
+        try {
+            FileDescriptor descriptor = Os.open(directory.getAbsolutePath(), OsConstants.O_RDONLY, 0);
+            try {
+                Os.fsync(descriptor);
+            } finally {
+                Os.close(descriptor);
+            }
+        } catch (ErrnoException exception) {
+            throw new IOException("Could not sync " + directory, exception);
+        }
     }
 
     private BufferedReader reader() throws IOException {
