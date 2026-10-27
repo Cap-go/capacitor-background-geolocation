@@ -51,6 +51,8 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         CAPPluginMethod(name: "removeGeofence", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "removeAllGeofences", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getMonitoredGeofences", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getLocationLog", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearLocationLog", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "checkPermissions", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestPermissions", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "updateHeaders", returnType: CAPPluginReturnPromise),
@@ -84,6 +86,9 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     private var geofenceHeaders: [String: String] = [:]
     private var minIntervalMs: Double = 0
     private var lastPostedLocationTime: Date?
+    private var locationLogEnabled: Bool = false
+    private var locationLogMaxEntries: Int = LocationLog.defaultMaxEntries
+    private var locationLogSqliteEnabled: Bool = false
 
     private let geofenceUrlKey = "CapgoBackgroundGeolocation.geofence.url"
     private let geofenceHeadersKey = "CapgoBackgroundGeolocation.geofence.headers"
@@ -126,6 +131,24 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             self.locationHeaders = self.stringHeaders(from: call.getObject("headers"))
             self.minIntervalMs = max(0, call.getDouble("minIntervalMs") ?? 0)
             self.lastPostedLocationTime = nil
+            self.locationLogEnabled = call.getBool("locationLog") ?? false
+            self.locationLogMaxEntries = max(1, call.getInt("locationLogMaxEntries") ?? LocationLog.defaultMaxEntries)
+            let sqliteRequested = call.getBool("locationLogSqlite") ?? false
+            #if !BGGEO_LOCATION_LOG_SQLITE
+            if sqliteRequested {
+                return call.reject(
+                    "SQLite location log is disabled. Set plugins.BackgroundGeolocation.locationLogSqlite to true in capacitor.config and run npx cap sync."
+                )
+            }
+            self.locationLogSqliteEnabled = false
+            #else
+            self.locationLogSqliteEnabled = sqliteRequested
+            LocationLogPreferences.setLocationLogSqlite(sqliteRequested)
+            #endif
+            LocationLog.resetShared()
+            if self.locationLogEnabled && self.locationLogSqliteEnabled {
+                LocationLog.shared.open()
+            }
             // Create fresh location manager and initialize date
             self.locationManager = CLLocationManager()
             guard let manager = self.locationManager else {
@@ -474,6 +497,48 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         }
     }
 
+    @objc func getLocationLog(_ call: CAPPluginCall) {
+        guard isWholeNumberOrAbsent(call, "afterId") else {
+            return call.reject("afterId must be a number")
+        }
+        let afterId = wholeInt64(from: call, key: "afterId") ?? 0
+        let limit = min(LocationLog.maxLimit, max(1, call.getInt("limit") ?? LocationLog.defaultLimit))
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                call.resolve(["entries": try LocationLog.shared.entries(afterId: afterId, limit: limit)])
+            } catch {
+                call.reject("Could not read the location log", nil, error)
+            }
+        }
+    }
+
+    @objc func clearLocationLog(_ call: CAPPluginCall) {
+        guard isWholeNumberOrAbsent(call, "upToId") else {
+            return call.reject("upToId must be a number")
+        }
+        let upToId = wholeInt64(from: call, key: "upToId")
+        DispatchQueue.global(qos: .userInitiated).async {
+            do {
+                try LocationLog.shared.clear(upToId: upToId)
+                call.resolve()
+            } catch {
+                call.reject("Could not clear the location log", nil, error)
+            }
+        }
+    }
+
+    private func isWholeNumberOrAbsent(_ call: CAPPluginCall, _ key: String) -> Bool {
+        guard call.options[key] != nil else { return true }
+        guard let value = call.getDouble(key) else { return false }
+        return Int64(exactly: value.rounded()) != nil
+    }
+
+    private func wholeInt64(from call: CAPPluginCall, key: String) -> Int64? {
+        guard call.options[key] != nil else { return nil }
+        guard let value = call.getDouble(key) else { return nil }
+        return Int64(exactly: value.rounded())
+    }
+
     private func ensureGeofenceLocationManager() -> CLLocationManager {
         if let manager = geofenceLocationManager {
             return manager
@@ -674,8 +739,14 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
               let body = try? JSONSerialization.data(withJSONObject: data) else {
             return
         }
+        let logId: Int64?
+        if locationLogEnabled && locationLogSqliteEnabled && LocationLog.shared.tracksPostOutcomes {
+            logId = LocationLog.shared.insert(data, maxEntries: locationLogMaxEntries)
+        } else {
+            logId = nil
+        }
         lastPostedLocationTime = location.timestamp
-        postJson(body, to: backendUrl, headers: locationHeaders, taskName: "CapgoLocationUpdate")
+        postJson(body, to: backendUrl, headers: locationHeaders, taskName: "CapgoLocationUpdate", logId: logId)
     }
 
     private func stringHeaders(from object: [String: Any]?) -> [String: String] {
@@ -693,7 +764,13 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         return headers
     }
 
-    private func postJson(_ body: Data, to url: URL, headers: [String: String], taskName: String) {
+    private func postJson(
+        _ body: Data,
+        to url: URL,
+        headers: [String: String],
+        taskName: String,
+        logId: Int64? = nil
+    ) {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -710,7 +787,11 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
                 backgroundTask = .invalid
             }
         }
-        URLSession.shared.dataTask(with: request) { _, _, _ in
+        URLSession.shared.dataTask(with: request) { _, response, error in
+            if let logId {
+                let status = (response as? HTTPURLResponse)?.statusCode
+                LocationLog.shared.complete(id: logId, httpStatus: status, error: error)
+            }
             if backgroundTask != .invalid {
                 UIApplication.shared.endBackgroundTask(backgroundTask)
                 backgroundTask = .invalid
@@ -876,6 +957,15 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
               let location = locations.last,
               isLocationValid(location) else {
             return
+        }
+
+        if locationLogEnabled {
+            let skipAppend = locationLogSqliteEnabled && locationBackendUrl != nil
+            if !skipAppend {
+                var entry = locationPayload(location)
+                entry["source"] = nil
+                LocationLog.shared.append(entry, maxEntries: locationLogMaxEntries)
+            }
         }
 
         // Native delivery does not depend on the bridge, so it keeps working

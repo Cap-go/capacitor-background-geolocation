@@ -30,6 +30,9 @@ final class LocationStore {
     private static final String KEY_HEADERS = "headers";
     private static final String KEY_MIN_INTERVAL_MS = "minIntervalMs";
     private static final String KEY_NETWORK_FALLBACK = "networkFallback";
+    private static final String KEY_LOCATION_LOG = "locationLog";
+    private static final String KEY_LOCATION_LOG_MAX_ENTRIES = "locationLogMaxEntries";
+    private static final String KEY_LOCATION_LOG_SQLITE = "locationLogSqlite";
     private static final String KEY_LAST_POST_TIME = "lastPostTime";
 
     private LocationStore() {}
@@ -47,11 +50,23 @@ final class LocationStore {
         float distanceFilter,
         Map<String, String> headers,
         long minIntervalMs,
-        boolean networkFallback
+        boolean networkFallback,
+        boolean locationLog,
+        int locationLogMaxEntries,
+        boolean locationLogSqlite
     ) {
         SharedPreferences.Editor editor = prefs(context).edit();
         if (url == null || url.isEmpty()) {
-            editor.clear();
+            editor
+                .remove(KEY_ENABLED)
+                .remove(KEY_URL)
+                .remove(KEY_TITLE)
+                .remove(KEY_MESSAGE)
+                .remove(KEY_DISTANCE_FILTER)
+                .remove(KEY_HEADERS)
+                .remove(KEY_MIN_INTERVAL_MS)
+                .remove(KEY_NETWORK_FALLBACK)
+                .remove(KEY_LAST_POST_TIME);
         } else {
             editor
                 .putBoolean(KEY_ENABLED, true)
@@ -64,7 +79,11 @@ final class LocationStore {
                 .putBoolean(KEY_NETWORK_FALLBACK, networkFallback)
                 .remove(KEY_LAST_POST_TIME);
         }
-        editor.apply();
+        editor
+            .putBoolean(KEY_LOCATION_LOG, locationLog)
+            .putInt(KEY_LOCATION_LOG_MAX_ENTRIES, locationLogMaxEntries)
+            .putBoolean(KEY_LOCATION_LOG_SQLITE, locationLogSqlite)
+            .apply();
     }
 
     static void saveHeaders(Context context, Map<String, String> headers) {
@@ -104,6 +123,18 @@ final class LocationStore {
         return prefs(context).getBoolean(KEY_NETWORK_FALLBACK, false);
     }
 
+    static boolean getLocationLog(Context context) {
+        return prefs(context).getBoolean(KEY_LOCATION_LOG, false);
+    }
+
+    static int getLocationLogMaxEntries(Context context) {
+        return prefs(context).getInt(KEY_LOCATION_LOG_MAX_ENTRIES, LocationLog.DEFAULT_MAX_ENTRIES);
+    }
+
+    static boolean getLocationLogSqlite(Context context) {
+        return prefs(context).getBoolean(KEY_LOCATION_LOG_SQLITE, false);
+    }
+
     static Map<String, String> getHeaders(Context context) {
         return headersFromJson(prefs(context).getString(KEY_HEADERS, null));
     }
@@ -129,9 +160,20 @@ final class LocationStore {
         prefs(context).edit().putLong(KEY_LAST_POST_TIME, locationTimeMs).apply();
     }
 
+    static long logLocationForNativePost(Context context, JSONObject data) {
+        if (!getLocationLog(context) || !getLocationLogSqlite(context)) {
+            return -1;
+        }
+        return LocationLog.getInstance(context).insert(data, getLocationLogMaxEntries(context));
+    }
+
     // POSTs a single location as JSON to the configured url. Runs synchronously,
     // so callers must invoke it off the main thread.
     static void sendLocation(Context context, JSONObject data) throws IOException {
+        sendLocation(context, data, -1);
+    }
+
+    static void sendLocation(Context context, JSONObject data, long logId) throws IOException {
         String urlString = getUrl(context);
         if (urlString == null || urlString.isEmpty()) {
             return;
@@ -164,6 +206,16 @@ final class LocationStore {
                 throw new IOException("Location POST failed with response code: " + responseCode);
             }
             markPosted(context, locationTimeMs);
+            if (logId != -1) {
+                LocationLog log = LocationLog.getInstance(context);
+                log.update(logId, LocationLog.STATUS_SENT, responseCode, null);
+            }
+        } catch (IOException exception) {
+            if (logId != -1) {
+                LocationLog log = LocationLog.getInstance(context);
+                log.update(logId, LocationLog.STATUS_FAILED, null, exception.getMessage());
+            }
+            throw exception;
         } finally {
             if (connection != null) {
                 connection.disconnect();

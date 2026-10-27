@@ -132,6 +132,10 @@ public class BackgroundGeolocation extends Plugin {
     }
 
     private void proceedWithStart(PluginCall call) {
+        if (call.getBoolean("locationLogSqlite", false) && !BuildConfig.LOCATION_LOG_SQLITE) {
+            call.reject(LocationLog.SQLITE_DISABLED_MESSAGE);
+            return;
+        }
         if (call.getBoolean("stale", false)) {
             fetchLastLocation(call);
         }
@@ -152,7 +156,10 @@ public class BackgroundGeolocation extends Plugin {
                 call.getString("url", null),
                 headersFromCall(call),
                 longOptionFromCall(call, "minIntervalMs", 0L),
-                call.getBoolean("networkFallback", false)
+                call.getBoolean("networkFallback", false),
+                call.getBoolean("locationLog", false),
+                Math.max(1, call.getInt("locationLogMaxEntries", LocationLog.DEFAULT_MAX_ENTRIES)),
+                call.getBoolean("locationLogSqlite", false)
             );
         });
         serviceStartedFuture.exceptionally((throwable) -> {
@@ -610,6 +617,44 @@ public class BackgroundGeolocation extends Plugin {
         call.resolve(result);
     }
 
+    @PluginMethod
+    public void getLocationLog(PluginCall call) {
+        if (!isWholeNumberOrAbsent(call, "afterId")) {
+            call.reject("afterId must be a number");
+            return;
+        }
+        Context context = getContext();
+        long afterId = longOptionFromCall(call, "afterId", 0L);
+        int limit = Math.min(LocationLog.MAX_LIMIT, Math.max(1, call.getInt("limit", LocationLog.DEFAULT_LIMIT)));
+        LocationLog.EXECUTOR.execute(() -> {
+            try {
+                JSObject result = new JSObject();
+                result.put("entries", LocationLog.getInstance(context).read(afterId, limit));
+                call.resolve(result);
+            } catch (Exception exception) {
+                call.reject("Could not read the location log", exception);
+            }
+        });
+    }
+
+    @PluginMethod
+    public void clearLocationLog(PluginCall call) {
+        if (!isWholeNumberOrAbsent(call, "upToId")) {
+            call.reject("upToId must be a number");
+            return;
+        }
+        Context context = getContext();
+        Long upToId = nullableWholeLongFromCall(call, "upToId");
+        LocationLog.EXECUTOR.execute(() -> {
+            try {
+                LocationLog.getInstance(context).clear(upToId);
+                call.resolve();
+            } catch (Exception exception) {
+                call.reject("Could not clear the location log", exception);
+            }
+        });
+    }
+
     private CompletableFuture<Void> requestGeofencePermissions(PluginCall call, boolean backgroundLocation) {
         if (hasGeofencePermissions(backgroundLocation)) {
             return CompletableFuture.completedFuture(null);
@@ -725,6 +770,37 @@ public class BackgroundGeolocation extends Plugin {
     // fit in 32 bits cross the bridge as Integer, so optLong is required (issue #62).
     static long longOptionFromCall(PluginCall call, String key, long defaultValue) {
         return call.getData().optLong(key, defaultValue);
+    }
+
+    static boolean isNumberOrAbsent(PluginCall call, String key) {
+        return !call.getData().has(key) || call.getData().opt(key) instanceof Number;
+    }
+
+    static boolean isWholeNumberOrAbsent(PluginCall call, String key) {
+        if (!call.getData().has(key)) {
+            return true;
+        }
+        Object value = call.getData().opt(key);
+        if (!(value instanceof Number)) {
+            return false;
+        }
+        double number = ((Number) value).doubleValue();
+        if (!Double.isFinite(number)) {
+            return false;
+        }
+        double rounded = Math.rint(number);
+        if (number != rounded) {
+            return false;
+        }
+        long asLong = (long) rounded;
+        return (double) asLong == rounded;
+    }
+
+    static Long nullableWholeLongFromCall(PluginCall call, String key) {
+        if (!call.getData().has(key)) {
+            return null;
+        }
+        return (long) Math.rint(((Number) call.getData().opt(key)).doubleValue());
     }
 
     private static Map<String, String> headersFromCall(PluginCall call) {

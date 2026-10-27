@@ -11,6 +11,7 @@ import com.getcapacitor.PluginCall;
 import com.google.android.gms.location.Geofence;
 import com.google.android.gms.location.GeofenceStatusCodes;
 import org.json.JSONException;
+import org.json.JSONObject;
 import org.junit.Test;
 
 /**
@@ -232,4 +233,32 @@ public class BackgroundGeolocationUnitTest {
     private static class ForegroundServiceStartNotAllowedException extends RuntimeException {}
 
     private static class ServiceStartNotAllowedException extends RuntimeException {}
+
+    @Test
+    public void testIsNumberOrAbsent() {
+        JSObject data = new JSObject();
+        data.put("afterId", 4211);
+        data.put("upToId", JSONObject.NULL);
+        data.put("limit", "50");
+        PluginCall call = new PluginCall(null, "BackgroundGeolocation", "test-callback", "getLocationLog", data);
+
+        assertTrue(BackgroundGeolocation.isNumberOrAbsent(call, "afterId"));
+        assertTrue(BackgroundGeolocation.isNumberOrAbsent(call, "missing"));
+        assertFalse(BackgroundGeolocation.isNumberOrAbsent(call, "upToId"));
+        assertFalse(BackgroundGeolocation.isNumberOrAbsent(call, "limit"));
+    }
+
+    @Test
+    public void testIsWholeNumberOrAbsent() {
+        JSObject data = new JSObject();
+        data.put("afterId", 4211);
+        data.put("upToId", 4211.5);
+        data.put("fractional", 1.2);
+        PluginCall call = new PluginCall(null, "BackgroundGeolocation", "test-callback", "clearLocationLog", data);
+
+        assertTrue(BackgroundGeolocation.isWholeNumberOrAbsent(call, "afterId"));
+        assertTrue(BackgroundGeolocation.isWholeNumberOrAbsent(call, "missing"));
+        assertFalse(BackgroundGeolocation.isWholeNumberOrAbsent(call, "upToId"));
+        assertFalse(BackgroundGeolocation.isWholeNumberOrAbsent(call, "fractional"));
+    }
 }

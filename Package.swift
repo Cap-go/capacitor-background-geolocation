@@ -19,10 +19,19 @@ let package = Package(
                 .product(name: "Capacitor", package: "capacitor-swift-pm"),
                 .product(name: "Cordova", package: "capacitor-swift-pm")
             ],
-            path: "ios/Sources/CapgoBackgroundGeolocationPlugin"),
+            path: "ios",
+            sources: ["Sources/CapgoBackgroundGeolocationPlugin"],
+            swiftSettings: [
+                // .define("BGGEO_LOCATION_LOG_SQLITE"),
+            ],
+            // linkerSettings: [.linkedLibrary("sqlite3")],
+        ),
         .testTarget(
             name: "CapgoBackgroundGeolocationPluginTests",
             dependencies: ["CapgoBackgroundGeolocationPlugin"],
-            path: "ios/Tests/CapgoBackgroundGeolocationPluginTests")
+            path: "ios/Tests/CapgoBackgroundGeolocationPluginTests",
+            swiftSettings: [
+                // .define("BGGEO_LOCATION_LOG_SQLITE"),
+            ])
     ]
 )
