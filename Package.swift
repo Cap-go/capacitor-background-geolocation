@@ -28,8 +28,8 @@ let package = Package(
         //     name: "CapgoBackgroundGeolocationLocationLogSqlite",
         //     dependencies: ["CapgoBackgroundGeolocationPlugin"],
         //     path: "ios/SqliteLocationLog",
-        //     linkerSettings: [.linkedLibrary("sqlite3")],
-        //     swiftSettings: [.define("BGGEO_LOCATION_LOG_SQLITE")]),
+        //     swiftSettings: [.define("BGGEO_LOCATION_LOG_SQLITE")],
+        //     linkerSettings: [.linkedLibrary("sqlite3")]),
         .testTarget(
             name: "CapgoBackgroundGeolocationPluginTests",
             dependencies: ["CapgoBackgroundGeolocationPlugin"],

@@ -100,14 +100,14 @@ function updatePackageSwift(enabled: boolean): void {
             name: "CapgoBackgroundGeolocationLocationLogSqlite",
             dependencies: ["CapgoBackgroundGeolocationPlugin"],
             path: "ios/SqliteLocationLog",
-            linkerSettings: [.linkedLibrary("sqlite3")],
-            swiftSettings: [.define("BGGEO_LOCATION_LOG_SQLITE")]),`;
+            swiftSettings: [.define("BGGEO_LOCATION_LOG_SQLITE")],
+            linkerSettings: [.linkedLibrary("sqlite3")]),`;
   const sqliteTargetDisabled = `// .target(
         //     name: "CapgoBackgroundGeolocationLocationLogSqlite",
         //     dependencies: ["CapgoBackgroundGeolocationPlugin"],
         //     path: "ios/SqliteLocationLog",
-        //     linkerSettings: [.linkedLibrary("sqlite3")],
-        //     swiftSettings: [.define("BGGEO_LOCATION_LOG_SQLITE")]),`;
+        //     swiftSettings: [.define("BGGEO_LOCATION_LOG_SQLITE")],
+        //     linkerSettings: [.linkedLibrary("sqlite3")]),`;
   const sqliteTargetPattern =
     /\/\/ \.target\(\s*\n\s*\/\/\s*name: "CapgoBackgroundGeolocationLocationLogSqlite",[\s\S]*?\/\/\s*swiftSettings: \[\.define\("BGGEO_LOCATION_LOG_SQLITE"\)\]\),|\.target\(\s*\n\s*name: "CapgoBackgroundGeolocationLocationLogSqlite",[\s\S]*?swiftSettings: \[\.define\("BGGEO_LOCATION_LOG_SQLITE"\)\]\),/;
   content = content.replace(sqliteTargetPattern, enabled ? sqliteTargetEnabled : sqliteTargetDisabled);
