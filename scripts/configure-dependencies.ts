@@ -71,35 +71,6 @@ function updatePodspec(enabled: boolean): void {
   fs.writeFileSync(podspecPath, content, 'utf8');
 }
 
-function updatePackageSwift(enabled: boolean): void {
-  if (!fs.existsSync(packageSwiftPath)) {
-    return;
-  }
-  let content = fs.readFileSync(packageSwiftPath, 'utf8');
-  const sqlitePath = 'ios/SqliteLocationLog';
-  const flagLine = enabled
-    ? `            swiftSettings: [.define("BGGEO_LOCATION_LOG_SQLITE")],\n            exclude: [],`
-    : `            exclude: ["${sqlitePath}"],`;
-  if (content.includes('swiftSettings: [.define("BGGEO_LOCATION_LOG_SQLITE")]')) {
-    content = content.replace(
-      /\s*swiftSettings: \[\.define\("BGGEO_LOCATION_LOG_SQLITE"\)\],\n\s*exclude: \[\],/,
-      enabled ? `\n            swiftSettings: [.define("BGGEO_LOCATION_LOG_SQLITE")],\n            exclude: [],` : `\n            exclude: ["${sqlitePath}"],`,
-    );
-  } else if (content.includes(`exclude: ["${sqlitePath}"]`)) {
-    content = content.replace(
-      /\s*exclude: \["ios\/SqliteLocationLog"\],/,
-      enabled ? `\n            swiftSettings: [.define("BGGEO_LOCATION_LOG_SQLITE")],\n            exclude: [],` : `\n            exclude: ["${sqlitePath}"],`,
-    );
-  } else {
-    content = content.replace(
-      /path: "ios\/Sources\/CapgoBackgroundGeolocationPlugin"\),/,
-      `path: "ios/Sources/CapgoBackgroundGeolocationPlugin",\n            ${flagLine}`,
-    );
-  }
-  fs.writeFileSync(packageSwiftPath, content, 'utf8');
-}
-
 const enabled = readLocationLogSqliteEnabled();
 updateGradleProperties(enabled);
 updatePodspec(enabled);
-updatePackageSwift(enabled);
