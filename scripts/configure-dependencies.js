@@ -40,7 +40,6 @@ const PLUGIN_ROOT = process.cwd();
 const CONFIG_JSON = process.env.CAPACITOR_CONFIG;
 const gradlePropertiesPath = path.join(PLUGIN_ROOT, 'android', 'gradle.properties');
 const podspecPath = path.join(PLUGIN_ROOT, 'CapgoBackgroundGeolocation.podspec');
-const packageSwiftPath = path.join(PLUGIN_ROOT, 'Package.swift');
 function readLocationLogSqliteEnabled() {
     if (!CONFIG_JSON) {
         return false;

@@ -7,7 +7,6 @@ const PLUGIN_ROOT = process.cwd();
 const CONFIG_JSON = process.env.CAPACITOR_CONFIG;
 const gradlePropertiesPath = path.join(PLUGIN_ROOT, 'android', 'gradle.properties');
 const podspecPath = path.join(PLUGIN_ROOT, 'CapgoBackgroundGeolocation.podspec');
-const packageSwiftPath = path.join(PLUGIN_ROOT, 'Package.swift');
 
 function readLocationLogSqliteEnabled(): boolean {
   if (!CONFIG_JSON) {
@@ -29,7 +28,7 @@ function readLocationLogSqliteEnabled(): boolean {
 }
 
 function updateGradleProperties(enabled: boolean): void {
-  let existingContent = fs.existsSync(gradlePropertiesPath) ? fs.readFileSync(gradlePropertiesPath, 'utf8') : '';
+  const existingContent = fs.existsSync(gradlePropertiesPath) ? fs.readFileSync(gradlePropertiesPath, 'utf8') : '';
   const lines = existingContent.split('\n').filter((line) => {
     const trimmed = line.trim();
     return (
