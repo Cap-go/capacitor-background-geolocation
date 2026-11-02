@@ -79,7 +79,7 @@ dependencies {
     implementation "androidx.work:work-runtime:$androidxWorkRuntimeVersion"
     testImplementation "junit:junit:$junitVersion"
     testImplementation "org.json:json:20260814"
-    testImplementation "org.robolectric:robolectric:4.16"
+    testImplementation "org.robolectric:robolectric:4.17"
     testImplementation "androidx.test:core:1.7.0"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
