@@ -22,7 +22,8 @@ public class GeofenceTransitionWorker extends Worker {
             return Result.success();
         }
         try {
-            GeofenceStore.sendTransition(getApplicationContext(), new JSONObject(payload));
+            int generation = getInputData().getInt(GeofenceStore.EXTRA_QUEUE_GENERATION, 0);
+            GeofenceStore.sendTransition(getApplicationContext(), new JSONObject(payload), generation);
             return Result.success();
         } catch (JSONException exception) {
             Logger.error("Invalid geofence transition payload", exception);

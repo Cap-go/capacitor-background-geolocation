@@ -26,6 +26,9 @@ import org.json.JSONObject;
 final class GeofenceStore {
 
     static final String EXTRA_GEOFENCE_PAYLOAD = "payload";
+    // Every transition POST job carries this tag, so the queued ones can be cancelled together.
+    static final String TRANSITION_WORK_TAG = "CapgoGeofenceTransition";
+    static final String EXTRA_QUEUE_GENERATION = "queueGeneration";
 
     private static final String PREFS_NAME = "CapgoBackgroundGeolocationGeofences";
     private static final String KEY_URL = "url";
@@ -36,6 +39,8 @@ final class GeofenceStore {
     private static final String KEY_PAYLOAD = "payload";
     private static final String KEY_REGION_IDS = "regionIds";
     private static final String KEY_REGION_PREFIX = "region.";
+    // Raised each time the queue is cleared; a job queued under an older value is not sent.
+    private static final String KEY_QUEUE_GENERATION = "queueGeneration";
 
     private GeofenceStore() {}
 
@@ -175,7 +180,7 @@ final class GeofenceStore {
         return transitionTypes;
     }
 
-    static JSONObject buildTransitionData(Context context, String identifier, boolean enter) throws JSONException {
+    static JSONObject buildTransitionData(Context context, String identifier, boolean enter, long time) throws JSONException {
         JSONObject region = getRegion(context, identifier);
         JSONObject payload = copy(jsonFromString(prefs(context).getString(KEY_PAYLOAD, null)));
         JSONObject regionPayload = region.optJSONObject("payload");
@@ -196,29 +201,76 @@ final class GeofenceStore {
         if (region.has("radius")) {
             data.put("radius", region.optDouble("radius"));
         }
+        // When the transition happened, in milliseconds: WorkManager can send it much later.
+        data.put("time", time);
         data.put("payload", payload);
         return data;
     }
 
-    static void enqueueTransition(Context context, JSONObject data) {
+    /** Queues a transition built under the given queue generation for a native POST. */
+    static void enqueueTransition(Context context, JSONObject data, int generation) {
         if (!getBackgroundLocation(context)) {
             return;
         }
         if (getUrl(context) == null || getUrl(context).isEmpty()) {
             return;
         }
-        Data inputData = new Data.Builder().putString(EXTRA_GEOFENCE_PAYLOAD, data.toString()).build();
+        Data inputData = new Data.Builder()
+            .putString(EXTRA_GEOFENCE_PAYLOAD, data.toString())
+            .putInt(EXTRA_QUEUE_GENERATION, generation)
+            .build();
         Constraints constraints = new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build();
         OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(GeofenceTransitionWorker.class)
             .setInputData(inputData)
             .setConstraints(constraints)
+            .addTag(TRANSITION_WORK_TAG)
             .build();
         WorkManager.getInstance(context).enqueue(request);
     }
 
-    static void sendTransition(Context context, JSONObject data) throws IOException {
+    /**
+     * Drops every queued transition. Raising the queue generation first means a job that is
+     * already running, which cancellation does not stop, is not sent either: it reads the
+     * generation after the url and headers, so it never pairs an old transition with a newer
+     * setup. Jobs queued before the tag existed carry only WorkManager's class-name tag.
+     */
+    static void cancelQueuedTransitions(Context context) {
+        raiseQueueGeneration(context);
+        WorkManager workManager = WorkManager.getInstance(context);
+        workManager.cancelAllWorkByTag(TRANSITION_WORK_TAG);
+        workManager.cancelAllWorkByTag(GeofenceTransitionWorker.class.getName());
+    }
+
+    /** The current queue generation; jobs from an older one are dropped instead of sent. */
+    static int queueGeneration(Context context) {
+        return prefs(context).getInt(KEY_QUEUE_GENERATION, 0);
+    }
+
+    /** Raises the queue generation, written at once so a running job sees it. */
+    static void raiseQueueGeneration(Context context) {
+        prefs(context)
+            .edit()
+            .putInt(KEY_QUEUE_GENERATION, queueGeneration(context) + 1)
+            .commit();
+    }
+
+    /** Whether setup moves transitions to another endpoint, which should not receive the queued ones. */
+    static boolean urlChanged(String previous, String next) {
+        String before = previous == null ? "" : previous;
+        String after = next == null ? "" : next;
+        return !before.equals(after);
+    }
+
+    static void sendTransition(Context context, JSONObject data, int generation) throws IOException {
         String urlString = getUrl(context);
+        Map<String, String> headers = getHeaders(context);
         if (urlString == null || urlString.isEmpty()) {
+            return;
+        }
+        // Read after the url and headers: an unchanged generation means both belong to the setup
+        // this transition was queued under.
+        if (queueGeneration(context) != generation) {
+            Logger.debug("Dropping a geofence transition queued before the queue was cleared");
             return;
         }
         HttpURLConnection connection = null;
@@ -233,7 +285,7 @@ final class GeofenceStore {
             connection.setRequestProperty("Accept", "application/json");
             connection.setRequestProperty("Content-Type", "application/json");
             connection.setRequestProperty("Content-Length", String.valueOf(body.length));
-            for (Map.Entry<String, String> header : getHeaders(context).entrySet()) {
+            for (Map.Entry<String, String> header : headers.entrySet()) {
                 connection.setRequestProperty(header.getKey(), header.getValue());
             }
             try (OutputStream outputStream = connection.getOutputStream()) {
