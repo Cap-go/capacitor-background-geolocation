@@ -73,7 +73,7 @@ case "$platform" in
   android)
     sync_or_add_platform android
     cd android
-    ./gradlew build test
+    ./gradlew build test assembleRelease
     ;;
   ios)
     prune_unrelated_capacitor_plugins
