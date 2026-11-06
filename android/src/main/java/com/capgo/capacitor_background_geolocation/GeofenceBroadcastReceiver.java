@@ -53,12 +53,12 @@ public class GeofenceBroadcastReceiver extends BroadcastReceiver {
 
         boolean enter = transition == Geofence.GEOFENCE_TRANSITION_ENTER;
         long time = transitionTime(event.getTriggeringLocation(), System.currentTimeMillis());
+        int captureGeneration = GeofenceStore.queueGeneration(context);
         try {
             for (Geofence geofence : triggeringGeofences) {
                 JSONObject data = GeofenceStore.buildTransitionData(context, geofence.getRequestId(), enter, time);
                 LocalEvents.emitGeofenceTransition(data.toString());
-                // Generation is read under QUEUE_LOCK inside enqueueTransition.
-                GeofenceStore.enqueueTransition(context, data);
+                GeofenceStore.enqueueTransition(context, data, captureGeneration);
             }
         } catch (Exception exception) {
             Logger.error("Failed to handle geofence transition", exception);

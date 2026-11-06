@@ -212,21 +212,26 @@ final class GeofenceStore {
 
     /**
      * Queues a transition for a native POST under the current queue generation.
+     * {@code captureGeneration} must be {@link #queueGeneration(Context)} taken before
+     * {@link #buildTransitionData(Context, String, boolean, long)} so a transition built from an
+     * old setup cannot enqueue after sign-out or URL change has raised the generation.
      * Holds QUEUE_LOCK with cancelQueuedTransitions so WorkManager sees cancel submissions
      * before any enqueue that observes the raised generation.
      */
-    static void enqueueTransition(Context context, JSONObject data) {
+    static void enqueueTransition(Context context, JSONObject data, int captureGeneration) {
         synchronized (QUEUE_LOCK) {
+            if (captureGeneration != queueGeneration(context)) {
+                return;
+            }
             if (!getBackgroundLocation(context)) {
                 return;
             }
             if (getUrl(context) == null || getUrl(context).isEmpty()) {
                 return;
             }
-            int generation = queueGeneration(context);
             Data inputData = new Data.Builder()
                 .putString(EXTRA_GEOFENCE_PAYLOAD, data.toString())
-                .putInt(EXTRA_QUEUE_GENERATION, generation)
+                .putInt(EXTRA_QUEUE_GENERATION, captureGeneration)
                 .build();
             Constraints constraints = new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build();
             OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(GeofenceTransitionWorker.class)
