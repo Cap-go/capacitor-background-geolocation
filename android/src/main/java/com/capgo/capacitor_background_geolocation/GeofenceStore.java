@@ -41,6 +41,9 @@ final class GeofenceStore {
     private static final String KEY_REGION_PREFIX = "region.";
     // Raised each time the queue is cleared; a job queued under an older value is not sent.
     private static final String KEY_QUEUE_GENERATION = "queueGeneration";
+    // Serializes raise+cancel submissions with enqueues so a broadcast cannot land a
+    // new-generation job between the generation bump and both cancelAllWorkByTag calls.
+    private static final Object QUEUE_LOCK = new Object();
 
     private GeofenceStore() {}
 
@@ -207,25 +210,32 @@ final class GeofenceStore {
         return data;
     }
 
-    /** Queues a transition built under the given queue generation for a native POST. */
-    static void enqueueTransition(Context context, JSONObject data, int generation) {
-        if (!getBackgroundLocation(context)) {
-            return;
+    /**
+     * Queues a transition for a native POST under the current queue generation.
+     * Holds QUEUE_LOCK with cancelQueuedTransitions so WorkManager sees cancel submissions
+     * before any enqueue that observes the raised generation.
+     */
+    static void enqueueTransition(Context context, JSONObject data) {
+        synchronized (QUEUE_LOCK) {
+            if (!getBackgroundLocation(context)) {
+                return;
+            }
+            if (getUrl(context) == null || getUrl(context).isEmpty()) {
+                return;
+            }
+            int generation = queueGeneration(context);
+            Data inputData = new Data.Builder()
+                .putString(EXTRA_GEOFENCE_PAYLOAD, data.toString())
+                .putInt(EXTRA_QUEUE_GENERATION, generation)
+                .build();
+            Constraints constraints = new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build();
+            OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(GeofenceTransitionWorker.class)
+                .setInputData(inputData)
+                .setConstraints(constraints)
+                .addTag(TRANSITION_WORK_TAG)
+                .build();
+            WorkManager.getInstance(context).enqueue(request);
         }
-        if (getUrl(context) == null || getUrl(context).isEmpty()) {
-            return;
-        }
-        Data inputData = new Data.Builder()
-            .putString(EXTRA_GEOFENCE_PAYLOAD, data.toString())
-            .putInt(EXTRA_QUEUE_GENERATION, generation)
-            .build();
-        Constraints constraints = new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build();
-        OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(GeofenceTransitionWorker.class)
-            .setInputData(inputData)
-            .setConstraints(constraints)
-            .addTag(TRANSITION_WORK_TAG)
-            .build();
-        WorkManager.getInstance(context).enqueue(request);
     }
 
     /**
@@ -233,12 +243,16 @@ final class GeofenceStore {
      * already running, which cancellation does not stop, is not sent either: it reads the
      * generation after the url and headers, so it never pairs an old transition with a newer
      * setup. Jobs queued before the tag existed carry only WorkManager's class-name tag.
+     * Holds QUEUE_LOCK with enqueueTransition so a broadcast cannot enqueue under the new
+     * generation before both cancel submissions reach WorkManager.
      */
     static void cancelQueuedTransitions(Context context) {
-        raiseQueueGeneration(context);
-        WorkManager workManager = WorkManager.getInstance(context);
-        workManager.cancelAllWorkByTag(TRANSITION_WORK_TAG);
-        workManager.cancelAllWorkByTag(GeofenceTransitionWorker.class.getName());
+        synchronized (QUEUE_LOCK) {
+            raiseQueueGeneration(context);
+            WorkManager workManager = WorkManager.getInstance(context);
+            workManager.cancelAllWorkByTag(TRANSITION_WORK_TAG);
+            workManager.cancelAllWorkByTag(GeofenceTransitionWorker.class.getName());
+        }
     }
 
     /** The current queue generation; jobs from an older one are dropped instead of sent. */
