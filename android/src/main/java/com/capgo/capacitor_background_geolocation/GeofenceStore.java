@@ -56,6 +56,43 @@ final class GeofenceStore {
         boolean backgroundLocation,
         Map<String, String> headers
     ) {
+        writeSetup(context, url, notifyOnEntry, notifyOnExit, payload, backgroundLocation, headers);
+    }
+
+    /**
+     * Persists geofencing setup and, when the endpoint changes, raises the queue generation and
+     * cancels queued transitions before writing the new url and payload, all under {@link #QUEUE_LOCK}
+     * so a broadcast cannot observe the new generation with the previous payload.
+     */
+    static void saveSetupForGeofencing(
+        Context context,
+        String url,
+        boolean notifyOnEntry,
+        boolean notifyOnExit,
+        JSONObject payload,
+        boolean backgroundLocation,
+        Map<String, String> headers
+    ) {
+        synchronized (QUEUE_LOCK) {
+            if (urlChanged(getUrl(context), url)) {
+                raiseQueueGeneration(context);
+                WorkManager workManager = WorkManager.getInstance(context);
+                workManager.cancelAllWorkByTag(TRANSITION_WORK_TAG);
+                workManager.cancelAllWorkByTag(GeofenceTransitionWorker.class.getName());
+            }
+            writeSetup(context, url, notifyOnEntry, notifyOnExit, payload, backgroundLocation, headers);
+        }
+    }
+
+    private static void writeSetup(
+        Context context,
+        String url,
+        boolean notifyOnEntry,
+        boolean notifyOnExit,
+        JSONObject payload,
+        boolean backgroundLocation,
+        Map<String, String> headers
+    ) {
         SharedPreferences.Editor editor = prefs(context).edit();
         if (url == null || url.isEmpty()) {
             editor.remove(KEY_URL);
@@ -69,6 +106,19 @@ final class GeofenceStore {
         editor.putBoolean(KEY_BACKGROUND_LOCATION, backgroundLocation);
         editor.putString(KEY_PAYLOAD, payload == null ? new JSONObject().toString() : payload.toString());
         editor.apply();
+    }
+
+    /**
+     * Captures the queue generation and transition payload under {@link #QUEUE_LOCK}, then enqueues
+     * when still current, so setup cannot change the generation or endpoint between the two steps.
+     */
+    static void handleGeofenceTransition(Context context, String identifier, boolean enter, long time) throws JSONException {
+        synchronized (QUEUE_LOCK) {
+            int captureGeneration = queueGeneration(context);
+            JSONObject data = buildTransitionData(context, identifier, enter, time);
+            LocalEvents.emitGeofenceTransition(data.toString());
+            enqueueTransitionLocked(context, data, captureGeneration);
+        }
     }
 
     static void saveHeaders(Context context, Map<String, String> headers) {
@@ -220,27 +270,31 @@ final class GeofenceStore {
      */
     static void enqueueTransition(Context context, JSONObject data, int captureGeneration) {
         synchronized (QUEUE_LOCK) {
-            if (captureGeneration != queueGeneration(context)) {
-                return;
-            }
-            if (!getBackgroundLocation(context)) {
-                return;
-            }
-            if (getUrl(context) == null || getUrl(context).isEmpty()) {
-                return;
-            }
-            Data inputData = new Data.Builder()
-                .putString(EXTRA_GEOFENCE_PAYLOAD, data.toString())
-                .putInt(EXTRA_QUEUE_GENERATION, captureGeneration)
-                .build();
-            Constraints constraints = new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build();
-            OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(GeofenceTransitionWorker.class)
-                .setInputData(inputData)
-                .setConstraints(constraints)
-                .addTag(TRANSITION_WORK_TAG)
-                .build();
-            WorkManager.getInstance(context).enqueue(request);
+            enqueueTransitionLocked(context, data, captureGeneration);
         }
+    }
+
+    private static void enqueueTransitionLocked(Context context, JSONObject data, int captureGeneration) {
+        if (captureGeneration != queueGeneration(context)) {
+            return;
+        }
+        if (!getBackgroundLocation(context)) {
+            return;
+        }
+        if (getUrl(context) == null || getUrl(context).isEmpty()) {
+            return;
+        }
+        Data inputData = new Data.Builder()
+            .putString(EXTRA_GEOFENCE_PAYLOAD, data.toString())
+            .putInt(EXTRA_QUEUE_GENERATION, captureGeneration)
+            .build();
+        Constraints constraints = new Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build();
+        OneTimeWorkRequest request = new OneTimeWorkRequest.Builder(GeofenceTransitionWorker.class)
+            .setInputData(inputData)
+            .setConstraints(constraints)
+            .addTag(TRANSITION_WORK_TAG)
+            .build();
+        WorkManager.getInstance(context).enqueue(request);
     }
 
     /**

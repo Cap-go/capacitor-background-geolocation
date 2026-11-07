@@ -478,10 +478,7 @@ public class BackgroundGeolocation extends Plugin {
 
         JSObject payload = call.getObject("payload", new JSObject());
         boolean backgroundLocation = call.getBoolean("backgroundLocation", false);
-        if (GeofenceStore.urlChanged(GeofenceStore.getUrl(getContext()), url)) {
-            GeofenceStore.cancelQueuedTransitions(getContext());
-        }
-        GeofenceStore.saveSetup(
+        GeofenceStore.saveSetupForGeofencing(
             getContext(),
             url,
             call.getBoolean("notifyOnEntry", true),
