@@ -37,15 +37,7 @@ public class GeofenceSetupAtomicTest {
         int generationBefore = GeofenceStore.queueGeneration(context);
 
         JSONObject newPayload = new JSONObject().put("account", "new");
-        GeofenceStore.saveSetupForGeofencing(
-            context,
-            "https://new.example/geo/",
-            true,
-            true,
-            newPayload,
-            true,
-            Collections.emptyMap()
-        );
+        GeofenceStore.saveSetupForGeofencing(context, "https://new.example/geo/", true, true, newPayload, true, Collections.emptyMap());
 
         assertEquals(generationBefore + 1, GeofenceStore.queueGeneration(context));
         assertEquals("https://new.example/geo/", GeofenceStore.getUrl(context));
