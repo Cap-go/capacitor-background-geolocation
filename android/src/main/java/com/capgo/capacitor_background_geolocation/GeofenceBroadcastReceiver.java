@@ -4,6 +4,7 @@ import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
+import android.location.Location;
 import android.os.Build;
 import com.getcapacitor.Logger;
 import com.google.android.gms.location.Geofence;
@@ -51,15 +52,22 @@ public class GeofenceBroadcastReceiver extends BroadcastReceiver {
         }
 
         boolean enter = transition == Geofence.GEOFENCE_TRANSITION_ENTER;
+        long time = transitionTime(event.getTriggeringLocation(), System.currentTimeMillis());
         try {
             for (Geofence geofence : triggeringGeofences) {
-                JSONObject data = GeofenceStore.buildTransitionData(context, geofence.getRequestId(), enter);
-                LocalEvents.emitGeofenceTransition(data.toString());
-                GeofenceStore.enqueueTransition(context, data);
+                GeofenceStore.handleGeofenceTransition(context, geofence.getRequestId(), enter, time);
             }
         } catch (Exception exception) {
             Logger.error("Failed to handle geofence transition", exception);
         }
+    }
+
+    /**
+     * The time of the location fix that triggered the transition, since the broadcast can arrive
+     * later; the receiver's own clock only when Play Services gives no location.
+     */
+    static long transitionTime(Location triggeringLocation, long now) {
+        return triggeringLocation != null ? triggeringLocation.getTime() : now;
     }
 
     static boolean shouldClearStoredRegions(int errorCode) {

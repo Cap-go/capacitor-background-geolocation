@@ -386,9 +386,18 @@ export interface GeofenceSetupOptions {
    * Endpoint that receives geofence transition payloads.
    *
    * On Android, native background POST delivery requires `backgroundLocation: true`.
+   * WorkManager retries every POST that does not get a 2xx response.
    *
-   * Delivery is best-effort: there is no on-disk queue and no automatic retry.
-   * Failed POSTs are logged and dropped.
+   * On iOS, transitions are posted by native code whether or not the WebView is
+   * running, including when iOS relaunches a terminated app for a region
+   * crossing, provided the app calls `GeofenceRelay.shared.start()` from its
+   * app delegate (see the README). Each transition is queued on disk and sent
+   * in order. A POST that fails for lack of network, with a 5xx, a 408 or a
+   * 429, or with a 401 or 403 (a lapsed token that {@link BackgroundGeolocationPlugin.updateHeaders}
+   * can replace) is retried; any other response removes it from the queue. The
+   * queue keeps the newest 100 transitions, none older than seven days, and is
+   * emptied when `url` changes or {@link BackgroundGeolocationPlugin.clearGeofenceQueue}
+   * is called. Android drops queued transitions in the same two cases.
    *
    * @since 8.0.30
    * @example "https://api.example.com/geofences"
@@ -621,6 +630,20 @@ export interface GeofenceTransitionEvent {
    * @since 8.0.30
    */
   payload?: Record<string, unknown>;
+
+  /**
+   * When the phone detected the transition, in milliseconds since the epoch.
+   *
+   * On Android, the time of the location fix that triggered it; on iOS, when
+   * iOS delivered the region event, which can follow the crossing by seconds
+   * or minutes; on web, the time of the position that crossed. A transition
+   * POSTed natively can be sent well after this, once the network or the app
+   * comes back, so the receiver should read this rather than its own clock.
+   *
+   * @since 8.6.0
+   * @example 1762350000000
+   */
+  time?: number;
 }
 
 /**
@@ -837,6 +860,24 @@ export interface BackgroundGeolocationPlugin {
    * });
    */
   updateHeaders(options: UpdateHeadersOptions): Promise<void>;
+
+  /**
+   * Drops geofence transitions queued for a native POST and not yet sent.
+   *
+   * Queued transitions go out with the `headers` in place when they are sent,
+   * so call this when the user signs out, or before another account's
+   * credentials are given to {@link BackgroundGeolocationPlugin.updateHeaders}
+   * or {@link BackgroundGeolocationPlugin.setupGeofencing}. The queue is also
+   * emptied when `setupGeofencing` is given a different `url`. On web there is
+   * no queue and this resolves at once.
+   *
+   * @returns A promise that resolves when the queue is empty
+   *
+   * @since 8.6.0
+   * @example
+   * await BackgroundGeolocation.clearGeofenceQueue();
+   */
+  clearGeofenceQueue(): Promise<void>;
 
   /**
    * Opens the device's location settings page.

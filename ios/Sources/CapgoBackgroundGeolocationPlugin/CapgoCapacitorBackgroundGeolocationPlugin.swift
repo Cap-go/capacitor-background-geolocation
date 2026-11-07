@@ -56,6 +56,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         CAPPluginMethod(name: "checkPermissions", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "requestPermissions", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "updateHeaders", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "clearGeofenceQueue", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getPluginVersion", returnType: CAPPluginReturnPromise)
     ]
     private var locationManager: CLLocationManager?
@@ -78,7 +79,6 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     private var pendingPermissionRequestTimeout: DispatchWorkItem?
     private var pendingGeofenceAddCalls: [String: CAPPluginCall] = [:]
     private var pendingGeofenceRegions: [String: (region: CLCircularRegion, payload: [String: Any])] = [:]
-    private var lastGeofenceTransition: [String: String] = [:]
     // When set (via the "url" start option), each valid location is also POSTed
     // as JSON directly from native code, independently of the WebView.
     private var locationBackendUrl: URL?
@@ -90,12 +90,12 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
     private var locationLogMaxEntries: Int = LocationLog.defaultMaxEntries
     private var locationLogSqliteEnabled: Bool = false
 
-    private let geofenceUrlKey = "CapgoBackgroundGeolocation.geofence.url"
-    private let geofenceHeadersKey = "CapgoBackgroundGeolocation.geofence.headers"
+    private let geofenceUrlKey = GeofenceRelay.urlKey
+    private let geofenceHeadersKey = GeofenceRelay.headersKey
     private let geofenceNotifyOnEntryKey = "CapgoBackgroundGeolocation.geofence.notifyOnEntry"
     private let geofenceNotifyOnExitKey = "CapgoBackgroundGeolocation.geofence.notifyOnExit"
-    private let geofencePayloadKey = "CapgoBackgroundGeolocation.geofence.payload"
-    private let geofenceRegionPrefix = "CapgoBackgroundGeolocation.geofence.region."
+    private let geofencePayloadKey = GeofenceRelay.payloadKey
+    private let geofenceRegionPrefix = GeofenceRelay.regionPrefix
 
     // Earth radius in meters for distance calculations
     private static let earthRadiusMeters: Double = 6371000.0
@@ -244,6 +244,15 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             self.locationHeaders = headers
             self.geofenceHeaders = headers
             self.persistGeofenceConfiguration()
+            GeofenceRelay.shared.flush()
+            call.resolve()
+        }
+    }
+
+    /// Drops geofence transitions queued for a native POST, for sign-out or an account switch.
+    @objc func clearGeofenceQueue(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            GeofenceRelay.shared.clearQueue()
             call.resolve()
         }
     }
@@ -359,6 +368,10 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
                 return call.reject("Payload must be valid JSON")
             }
 
+            // Transitions queued for another endpoint are not sent to this one.
+            if backendUrl != self.geofenceBackendUrl {
+                GeofenceRelay.shared.clearQueue()
+            }
             self.geofenceBackendUrl = backendUrl
             self.geofenceHeaders = self.stringHeaders(from: call.getObject("headers"))
             self.geofenceNotifyOnEntry = call.getBool("notifyOnEntry") ?? true
@@ -444,7 +457,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
                     "CANCELLED"
                 )
                 self.removePersistedGeofenceRegion(identifier)
-                self.lastGeofenceTransition.removeValue(forKey: identifier)
+                GeofenceRelay.shared.forget(identifier)
                 return call.resolve()
             }
             guard self.persistedGeofenceRegionIds().contains(identifier) else {
@@ -454,14 +467,14 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
                 self.pendingGeofenceAddCalls.removeValue(forKey: identifier)?.reject("Geofence was removed before monitoring started", "CANCELLED")
                 self.pendingGeofenceRegions.removeValue(forKey: identifier)
                 self.removePersistedGeofenceRegion(identifier)
-                self.lastGeofenceTransition.removeValue(forKey: identifier)
+                GeofenceRelay.shared.forget(identifier)
                 return call.resolve()
             }
             manager.stopMonitoring(for: region)
             self.pendingGeofenceAddCalls.removeValue(forKey: identifier)?.reject("Geofence was removed before monitoring started", "CANCELLED")
             self.pendingGeofenceRegions.removeValue(forKey: identifier)
             self.removePersistedGeofenceRegion(identifier)
-            self.lastGeofenceTransition.removeValue(forKey: identifier)
+            GeofenceRelay.shared.forget(identifier)
             call.resolve()
         }
     }
@@ -475,7 +488,7 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             }
             for identifier in identifiers {
                 self.removePersistedGeofenceRegion(identifier)
-                self.lastGeofenceTransition.removeValue(forKey: identifier)
+                GeofenceRelay.shared.forget(identifier)
             }
             for (_, pendingCall) in self.pendingGeofenceAddCalls {
                 pendingCall.reject("Geofences were removed before monitoring started", "CANCELLED")
@@ -543,9 +556,9 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         if let manager = geofenceLocationManager {
             return manager
         }
-        let manager = CLLocationManager()
-        manager.delegate = self
-        manager.pausesLocationUpdatesAutomatically = false
+        // The relay owns the location manager that monitors geofences, so
+        // transitions reach native code even before a plugin is created.
+        let manager = GeofenceRelay.shared.attach(self)
         geofenceLocationManager = manager
         return manager
     }
@@ -626,59 +639,10 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
         })
     }
 
-    private func geofenceTransitionData(for region: CLRegion, enter: Bool) -> [String: Any] {
-        let persistedRegion = persistedGeofenceRegion(region.identifier)
-        let regionPayload = persistedRegion["payload"] as? [String: Any] ?? [:]
-        var payload = geofencePayload
-        for (key, value) in regionPayload {
-            payload[key] = value
-        }
-
-        var data = payload
-        data["identifier"] = region.identifier
-        data["transition"] = enter ? "enter" : "exit"
-        data["enter"] = enter
-        if let circularRegion = region as? CLCircularRegion {
-            data["latitude"] = circularRegion.center.latitude
-            data["longitude"] = circularRegion.center.longitude
-            data["radius"] = circularRegion.radius
-        } else {
-            data["latitude"] = persistedRegion["latitude"]
-            data["longitude"] = persistedRegion["longitude"]
-            data["radius"] = persistedRegion["radius"]
-        }
-        data["payload"] = payload
-        return data
-    }
-
-    private func handleGeofenceTransition(for region: CLRegion, enter: Bool) {
-        if let circularRegion = region as? CLCircularRegion {
-            if enter && !circularRegion.notifyOnEntry {
-                return
-            }
-            if !enter && !circularRegion.notifyOnExit {
-                return
-            }
-        }
-
-        let transition = enter ? "enter" : "exit"
-        if lastGeofenceTransition[region.identifier] == transition {
-            return
-        }
-        lastGeofenceTransition[region.identifier] = transition
-
-        let data = geofenceTransitionData(for: region, enter: enter)
+    // Transitions are built, queued and POSTed by GeofenceRelay; the plugin
+    // only passes them on to JavaScript.
+    func relayGeofenceTransition(_ data: [String: Any]) {
         notifyListeners("geofenceTransition", data: data, retainUntilConsumed: true)
-        postGeofenceTransition(data)
-    }
-
-    private func postGeofenceTransition(_ data: [String: Any]) {
-        guard let backendUrl = geofenceBackendUrl,
-              JSONSerialization.isValidJSONObject(data),
-              let body = try? JSONSerialization.data(withJSONObject: data) else {
-            return
-        }
-        postJson(body, to: backendUrl, headers: geofenceHeaders, taskName: "CapgoGeofenceTransition")
     }
 
     // Like formatLocation, but safe for JSONSerialization: the bridge's
@@ -1039,23 +1003,6 @@ public class BackgroundGeolocation: CAPPlugin, CLLocationManagerDelegate, CAPBri
             ],
             retainUntilConsumed: true
         )
-    }
-
-    public func locationManager(_ manager: CLLocationManager, didEnterRegion region: CLRegion) {
-        guard manager === geofenceLocationManager, region is CLCircularRegion else { return }
-        handleGeofenceTransition(for: region, enter: true)
-    }
-
-    public func locationManager(_ manager: CLLocationManager, didExitRegion region: CLRegion) {
-        guard manager === geofenceLocationManager, region is CLCircularRegion else { return }
-        handleGeofenceTransition(for: region, enter: false)
-    }
-
-    public func locationManager(_ manager: CLLocationManager, didDetermineState state: CLRegionState, for region: CLRegion) {
-        guard manager === geofenceLocationManager, region is CLCircularRegion else { return }
-        if state == .inside {
-            handleGeofenceTransition(for: region, enter: true)
-        }
     }
 
     @objc override public func checkPermissions(_ call: CAPPluginCall) {
