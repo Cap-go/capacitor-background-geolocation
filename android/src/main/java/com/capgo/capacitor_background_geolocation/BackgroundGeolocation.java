@@ -173,6 +173,13 @@ public class BackgroundGeolocation extends Plugin {
         });
     }
 
+    /** Drops geofence transitions queued for a native POST, for sign-out or an account switch. */
+    @PluginMethod
+    public void clearGeofenceQueue(PluginCall call) {
+        GeofenceStore.cancelQueuedTransitions(getContext());
+        call.resolve();
+    }
+
     @PluginMethod
     public void updateHeaders(PluginCall call) {
         Map<String, String> headers = headersFromObject(call.getObject("headers", new JSObject()));
@@ -471,7 +478,7 @@ public class BackgroundGeolocation extends Plugin {
 
         JSObject payload = call.getObject("payload", new JSObject());
         boolean backgroundLocation = call.getBoolean("backgroundLocation", false);
-        GeofenceStore.saveSetup(
+        GeofenceStore.saveSetupForGeofencing(
             getContext(),
             url,
             call.getBoolean("notifyOnEntry", true),

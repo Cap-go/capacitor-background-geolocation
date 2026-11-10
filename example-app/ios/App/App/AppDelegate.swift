@@ -1,5 +1,10 @@
 import UIKit
 import Capacitor
+#if canImport(CapgoBackgroundGeolocationPlugin)
+import CapgoBackgroundGeolocationPlugin
+#else
+import CapgoBackgroundGeolocation
+#endif
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
@@ -7,7 +12,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
-        // Override point for customization after application launch.
+        // Geofence crossings reach native code even when iOS relaunches the app with no scene.
+        GeofenceRelay.shared.start()
         return true
     }
 
