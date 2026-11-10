@@ -35,6 +35,7 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField "String", "PLUGIN_VERSION", "\"${pluginVersion}\""
         buildConfigField "boolean", "LOCATION_LOG_SQLITE", includeLocationLogSqlite == 'true' ? 'true' : 'false'
+        consumerProguardFiles 'consumer-rules.pro'
     }
     buildFeatures {
         buildConfig = true
