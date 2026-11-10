@@ -6,7 +6,7 @@
   <init>(android.content.Context);
 }
 
-# WorkManager instantiates workers by class name from the WorkRequest; keep the public constructor used by the framework.
--keep class * extends androidx.work.Worker {
+# WorkManager instantiates workers by class name from the WorkRequest; keep this plugin worker and its public constructor.
+-keep class com.capgo.capacitor_background_geolocation.GeofenceTransitionWorker {
   <init>(android.content.Context, androidx.work.WorkerParameters);
 }
