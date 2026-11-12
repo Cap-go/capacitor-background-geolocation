@@ -204,9 +204,12 @@ public class BackgroundGeolocation extends Plugin {
         if (locationPermissionFuture != null) {
             return locationPermissionFuture;
         }
-        locationPermissionFuture = new CompletableFuture<>();
+        // The permission callback can run synchronously when Android cancels the request; it may
+        // complete and clear locationPermissionFuture before this method returns.
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        locationPermissionFuture = future;
         requestPermissionForAlias("location", call, "locationPermissionsCallback");
-        return locationPermissionFuture;
+        return future;
     }
 
     @PermissionCallback
@@ -252,12 +255,14 @@ public class BackgroundGeolocation extends Plugin {
     @PermissionCallback
     private void generalLocationPermissionsCallback(PluginCall call) {
         Set<String> permissions = parseRequestedPermissions(call);
+        permissions.remove("location");
         continuePermissionRequest(call, permissions);
     }
 
     @PermissionCallback
     private void generalBackgroundPermissionsCallback(PluginCall call) {
         Set<String> permissions = parseRequestedPermissions(call);
+        permissions.remove("backgroundLocation");
         continuePermissionRequest(call, permissions);
     }
 
