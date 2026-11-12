@@ -27,7 +27,7 @@ public class BackgroundGeolocationPermissionTest {
     }
 
     private static PluginCall requestPermissionsCall(JSObject data) {
-        return new PluginCall(null, "BackgroundGeolocation", "test-callback", "requestPermissions", data);
+        return new NoHandlerPluginCall("BackgroundGeolocation", "test-callback", "requestPermissions", data);
     }
 
     @Test
@@ -57,7 +57,21 @@ public class BackgroundGeolocationPermissionTest {
         assertEquals("Each permission should be requested at most once per call", 1, locationRequests.get());
     }
 
+    private static final class NoHandlerPluginCall extends PluginCall {
+
+        NoHandlerPluginCall(String pluginId, String callbackId, String methodName, JSObject data) {
+            super(null, pluginId, callbackId, methodName, data);
+        }
+
+        @Override
+        public void resolve(JSObject data) {}
+
+        @Override
+        public void resolve() {}
+    }
+
     private static final class SyncPermissionBackgroundGeolocation extends BackgroundGeolocation {
+
         private final PermissionState locationState;
         private AtomicInteger locationRequestCounter;
 
