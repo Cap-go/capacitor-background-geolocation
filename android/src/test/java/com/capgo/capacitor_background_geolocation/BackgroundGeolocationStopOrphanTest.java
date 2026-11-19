@@ -16,6 +16,7 @@ import android.os.Build;
 import android.os.IBinder;
 import androidx.test.core.app.ApplicationProvider;
 import com.getcapacitor.JSObject;
+import com.getcapacitor.PermissionState;
 import com.getcapacitor.PluginCall;
 import java.lang.reflect.Field;
 import java.util.Collections;
@@ -386,6 +387,11 @@ public class BackgroundGeolocationStopOrphanTest {
         @Override
         public Context getContext() {
             return appContext;
+        }
+
+        @Override
+        public PermissionState getPermissionState(String alias) {
+            return PermissionState.GRANTED;
         }
     }
 }
