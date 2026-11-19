@@ -370,6 +370,10 @@ public class BackgroundGeolocation extends Plugin {
                 call.resolve();
                 return;
             }
+            if (LocationStore.isEnabled(getContext())) {
+                stopOrphanedNativeDelivery(call);
+                return;
+            }
             call.resolve();
             return;
         }
@@ -982,6 +986,68 @@ public class BackgroundGeolocation extends Plugin {
 
     private void stopBackgroundService() {
         getContext().stopService(createServiceIntent());
+    }
+
+    // After activity recreation the plugin has no serviceConnectionFuture, but
+    // native delivery may still be running in the foreground service.
+    private void stopOrphanedNativeDelivery(PluginCall call) {
+        Intent serviceIntent = createServiceIntent();
+        CompletableFuture<Void> bindComplete = new CompletableFuture<>();
+        ServiceConnection orphanConnection = new ServiceConnection() {
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder binder) {
+                try {
+                    ((BackgroundGeolocationService.LocalBinder) binder).stop();
+                    bindComplete.complete(null);
+                } catch (RuntimeException exception) {
+                    bindComplete.completeExceptionally(exception);
+                } finally {
+                    try {
+                        getContext().unbindService(this);
+                    } catch (IllegalArgumentException ignored) {
+                        // Service was not bound or already unbound.
+                    }
+                }
+            }
+
+            @Override
+            public void onServiceDisconnected(ComponentName name) {}
+        };
+
+        try {
+            boolean bound = getContext().bindService(serviceIntent, orphanConnection, Context.BIND_AUTO_CREATE);
+            if (!bound) {
+                releaseOrphanedNativeDeliveryFallback();
+                resolveStopCall(call);
+                return;
+            }
+        } catch (SecurityException exception) {
+            releaseOrphanedNativeDeliveryFallback();
+            call.reject("Service connection failed: " + exception.getMessage());
+            return;
+        }
+
+        bindComplete.whenComplete((ignored, throwable) -> {
+            if (throwable != null) {
+                releaseOrphanedNativeDeliveryFallback();
+                call.reject("Service connection failed: " + throwable.getMessage());
+                return;
+            }
+            resolveStopCall(call);
+        });
+    }
+
+    private void releaseOrphanedNativeDeliveryFallback() {
+        LocationStore.clear(getContext());
+        stopBackgroundService();
+    }
+
+    private void resolveStopCall(PluginCall call) {
+        if (watchCall != null) {
+            watchCall.setKeepAlive(false);
+            watchCall = null;
+        }
+        call.resolve();
     }
 
     private void releaseServiceConnection() {
