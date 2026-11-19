@@ -21,6 +21,7 @@ import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
 import org.junit.Before;
@@ -265,6 +266,55 @@ public class BackgroundGeolocationStopOrphanTest {
     }
 
     @Test
+    public void secondStopWaitsForOrphanTeardownInProgress() {
+        LocationStore.saveSetup(
+            context,
+            "https://example.com/locations",
+            "Tracking",
+            "Sharing location",
+            0f,
+            Collections.emptyMap(),
+            10_000L,
+            false,
+            false,
+            LocationLog.DEFAULT_MAX_ENTRIES,
+            false
+        );
+
+        AtomicReference<ServiceConnection> capturedConnection = new AtomicReference<>();
+        Context capturingContext = new ContextWrapper(context) {
+            @Override
+            public boolean bindService(Intent service, ServiceConnection conn, int flags) {
+                capturedConnection.set(conn);
+                return true;
+            }
+
+            @Override
+            public void unbindService(ServiceConnection conn) {}
+        };
+
+        ContextBoundBackgroundGeolocation plugin = new ContextBoundBackgroundGeolocation(capturingContext);
+        AtomicInteger firstResolved = new AtomicInteger();
+        AtomicInteger secondResolved = new AtomicInteger();
+
+        plugin.stop(countingStopCall(firstResolved));
+        assertFalse("native delivery prefs should clear before bind callback", LocationStore.isEnabled(context));
+
+        plugin.stop(countingStopCall(secondResolved));
+        assertEquals("second stop() must wait for teardown", 0, secondResolved.get());
+
+        ServiceConnection connection = capturedConnection.get();
+        assertNotNull(connection);
+        BackgroundGeolocationService service = Robolectric.setupService(BackgroundGeolocationService.class);
+        IBinder serviceBinder = service.onBind(new Intent(context, BackgroundGeolocationService.class));
+        connection.onServiceConnected(new ComponentName(context, BackgroundGeolocationService.class), serviceBinder);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        assertEquals(1, firstResolved.get());
+        assertEquals(1, secondResolved.get());
+    }
+
+    @Test
     public void resolveStopCallDoesNotClearReplacementWatchCall() throws Exception {
         ContextBoundBackgroundGeolocation plugin = new ContextBoundBackgroundGeolocation(context);
         PluginCall stopCall = stopCall(new AtomicBoolean());
@@ -307,6 +357,20 @@ public class BackgroundGeolocationStopOrphanTest {
             @Override
             public void resolve(JSObject data) {
                 resolved.set(true);
+            }
+        };
+    }
+
+    private static PluginCall countingStopCall(AtomicInteger resolved) {
+        return new PluginCall(null, "BackgroundGeolocation", "test-callback", "stop", new JSObject()) {
+            @Override
+            public void resolve() {
+                resolved.incrementAndGet();
+            }
+
+            @Override
+            public void resolve(JSObject data) {
+                resolved.incrementAndGet();
             }
         };
     }

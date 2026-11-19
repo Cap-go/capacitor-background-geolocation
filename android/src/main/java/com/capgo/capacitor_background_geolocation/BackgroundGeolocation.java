@@ -375,11 +375,7 @@ public class BackgroundGeolocation extends Plugin {
                     savedCall.setKeepAlive(false);
                 }
             }
-            if (LocationStore.isEnabled(getContext())) {
-                stopOrphanedNativeDelivery(call);
-                return;
-            }
-            call.resolve();
+            stopOrphanedNativeDelivery(call);
             return;
         }
         // Wait for an in-flight start() to reach the service before stopping it.
@@ -996,7 +992,24 @@ public class BackgroundGeolocation extends Plugin {
     // After activity recreation the plugin has no serviceConnectionFuture, but
     // native delivery may still be running in the foreground service.
     private void stopOrphanedNativeDelivery(PluginCall call) {
+        CompletableFuture<Void> pending = orphanNativeDeliveryStopFuture;
+        if (pending != null && !pending.isDone()) {
+            pending.whenComplete((ignored, throwable) -> {
+                if (throwable != null) {
+                    call.reject("Service connection failed: " + throwable.getMessage());
+                } else {
+                    call.resolve();
+                }
+            });
+            return;
+        }
+        if (!LocationStore.isEnabled(getContext())) {
+            call.resolve();
+            return;
+        }
         PluginCall watchCallAtOrphanStop = watchCall;
+        // Turn native delivery off first so a sticky restart cannot resume tracking.
+        LocationStore.clear(getContext());
         Intent serviceIntent = createServiceIntent();
         CompletableFuture<Void> bindComplete = new CompletableFuture<>();
         CompletableFuture<Void> stopPending = new CompletableFuture<>();
@@ -1026,13 +1039,13 @@ public class BackgroundGeolocation extends Plugin {
             boolean bound = getContext().bindService(serviceIntent, orphanConnection, Context.BIND_AUTO_CREATE);
             if (!bound) {
                 unbindOrphanedConnection(orphanConnection);
-                releaseOrphanedNativeDeliveryFallback();
+                stopBackgroundService();
                 finishOrphanNativeDeliveryStop(stopPending, call, watchCallAtOrphanStop);
                 return;
             }
         } catch (SecurityException exception) {
             unbindOrphanedConnection(orphanConnection);
-            releaseOrphanedNativeDeliveryFallback();
+            stopBackgroundService();
             orphanNativeDeliveryStopFuture = null;
             stopPending.completeExceptionally(exception);
             call.reject("Service connection failed: " + exception.getMessage());
@@ -1041,7 +1054,7 @@ public class BackgroundGeolocation extends Plugin {
 
         bindComplete.whenComplete((ignored, throwable) -> {
             if (throwable != null) {
-                releaseOrphanedNativeDeliveryFallback();
+                stopBackgroundService();
                 orphanNativeDeliveryStopFuture = null;
                 stopPending.completeExceptionally(throwable);
                 call.reject("Service connection failed: " + throwable.getMessage());
@@ -1063,11 +1076,6 @@ public class BackgroundGeolocation extends Plugin {
         resolveStopCall(call, watchCallAtOrphanStop);
         orphanNativeDeliveryStopFuture = null;
         stopPending.complete(null);
-    }
-
-    private void releaseOrphanedNativeDeliveryFallback() {
-        LocationStore.clear(getContext());
-        stopBackgroundService();
     }
 
     private void resolveStopCall(PluginCall call, PluginCall watchCallAtOrphanStop) {
