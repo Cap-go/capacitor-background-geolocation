@@ -191,7 +191,7 @@ public class BackgroundGeolocationStopOrphanTest {
 
         PluginCall pendingStart = new PluginCall(null, "BackgroundGeolocation", "pending-start", "start", new JSObject()) {
             @Override
-            public void setKeepAlive(boolean keepAlive) {}
+            public void setKeepAlive(Boolean keepAlive) {}
         };
         Field watchCallField = BackgroundGeolocation.class.getDeclaredField("watchCall");
         watchCallField.setAccessible(true);
@@ -270,7 +270,7 @@ public class BackgroundGeolocationStopOrphanTest {
         PluginCall stopCall = stopCall(new AtomicBoolean());
         PluginCall newWatchCall = new PluginCall(null, "BackgroundGeolocation", "watch-callback", "start", new JSObject()) {
             @Override
-            public void setKeepAlive(boolean keepAlive) {}
+            public void setKeepAlive(Boolean keepAlive) {}
         };
 
         Field watchCallField = BackgroundGeolocation.class.getDeclaredField("watchCall");
