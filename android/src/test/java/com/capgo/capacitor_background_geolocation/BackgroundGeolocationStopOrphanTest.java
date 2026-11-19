@@ -1,7 +1,9 @@
 package com.capgo.capacitor_background_geolocation;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.Manifest;
@@ -15,7 +17,9 @@ import android.os.IBinder;
 import androidx.test.core.app.ApplicationProvider;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.PluginCall;
+import java.lang.reflect.Field;
 import java.util.Collections;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import org.junit.After;
@@ -126,10 +130,17 @@ public class BackgroundGeolocationStopOrphanTest {
             false
         );
 
+        AtomicReference<Intent> stoppedServiceIntent = new AtomicReference<>();
         Context bindRefusingContext = new ContextWrapper(context) {
             @Override
             public boolean bindService(Intent service, ServiceConnection conn, int flags) {
                 return false;
+            }
+
+            @Override
+            public boolean stopService(Intent name) {
+                stoppedServiceIntent.set(name);
+                return super.stopService(name);
             }
         };
         ContextBoundBackgroundGeolocation plugin = new ContextBoundBackgroundGeolocation(bindRefusingContext);
@@ -140,6 +151,150 @@ public class BackgroundGeolocationStopOrphanTest {
 
         assertTrue("stop() should resolve when bind is refused", resolved.get());
         assertFalse("bind refusal should clear native delivery prefs", LocationStore.isEnabled(context));
+        Intent stopIntent = stoppedServiceIntent.get();
+        assertNotNull("bind refusal should stop BackgroundGeolocationService", stopIntent);
+        assertEquals(BackgroundGeolocationService.class.getName(), stopIntent.getComponent().getClassName());
+    }
+
+    @Test
+    public void stopWithPendingPermissionStillStopsOrphanedNativeDelivery() throws Exception {
+        LocationStore.saveSetup(
+            context,
+            "https://example.com/locations",
+            "Tracking",
+            "Sharing location",
+            0f,
+            Collections.emptyMap(),
+            10_000L,
+            false,
+            false,
+            LocationLog.DEFAULT_MAX_ENTRIES,
+            false
+        );
+
+        AtomicReference<ServiceConnection> capturedConnection = new AtomicReference<>();
+        Context capturingContext = new ContextWrapper(context) {
+            @Override
+            public boolean bindService(Intent service, ServiceConnection conn, int flags) {
+                capturedConnection.set(conn);
+                return true;
+            }
+
+            @Override
+            public void unbindService(ServiceConnection conn) {}
+        };
+
+        ContextBoundBackgroundGeolocation plugin = new ContextBoundBackgroundGeolocation(capturingContext);
+        Field locationPermissionFutureField = BackgroundGeolocation.class.getDeclaredField("locationPermissionFuture");
+        locationPermissionFutureField.setAccessible(true);
+        locationPermissionFutureField.set(plugin, new CompletableFuture<Void>());
+
+        PluginCall pendingStart = new PluginCall(null, "BackgroundGeolocation", "pending-start", "start", new JSObject()) {
+            @Override
+            public void setKeepAlive(boolean keepAlive) {}
+        };
+        Field watchCallField = BackgroundGeolocation.class.getDeclaredField("watchCall");
+        watchCallField.setAccessible(true);
+        watchCallField.set(plugin, pendingStart);
+
+        AtomicBoolean stopResolved = new AtomicBoolean();
+        plugin.stop(stopCall(stopResolved));
+        ServiceConnection connection = capturedConnection.get();
+        assertNotNull("stop() should reach orphan bind after canceling a pending permission start", connection);
+
+        BackgroundGeolocationService service = Robolectric.setupService(BackgroundGeolocationService.class);
+        IBinder serviceBinder = service.onBind(new Intent(context, BackgroundGeolocationService.class));
+        connection.onServiceConnected(new ComponentName(context, BackgroundGeolocationService.class), serviceBinder);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        assertTrue("stop() should resolve after orphan cleanup", stopResolved.get());
+        assertFalse("orphan cleanup should clear prefs", LocationStore.isEnabled(context));
+    }
+
+    @Test
+    public void startRejectedWhileOrphanStopIsPending() throws Exception {
+        LocationStore.saveSetup(
+            context,
+            "https://example.com/locations",
+            "Tracking",
+            "Sharing location",
+            0f,
+            Collections.emptyMap(),
+            10_000L,
+            false,
+            false,
+            LocationLog.DEFAULT_MAX_ENTRIES,
+            false
+        );
+
+        AtomicReference<ServiceConnection> capturedConnection = new AtomicReference<>();
+        Context slowBindContext = new ContextWrapper(context) {
+            @Override
+            public boolean bindService(Intent service, ServiceConnection conn, int flags) {
+                capturedConnection.set(conn);
+                return true;
+            }
+
+            @Override
+            public void unbindService(ServiceConnection conn) {}
+        };
+
+        ContextBoundBackgroundGeolocation plugin = new ContextBoundBackgroundGeolocation(slowBindContext);
+        AtomicBoolean stopResolved = new AtomicBoolean();
+        plugin.stop(stopCall(stopResolved));
+
+        ServiceConnection orphanConnection = capturedConnection.get();
+        assertNotNull("orphan stop should bind without completing", orphanConnection);
+
+        AtomicReference<String> startRejectCode = new AtomicReference<>();
+        PluginCall startCall = new PluginCall(null, "BackgroundGeolocation", "start-callback", "start", new JSObject()) {
+            @Override
+            public void reject(String msg, String code) {
+                startRejectCode.set(code);
+            }
+        };
+        plugin.start(startCall);
+        assertEquals("start() should block while orphan stop is pending", "ALREADY_STARTED", startRejectCode.get());
+
+        BackgroundGeolocationService service = Robolectric.setupService(BackgroundGeolocationService.class);
+        IBinder serviceBinder = service.onBind(new Intent(context, BackgroundGeolocationService.class));
+        orphanConnection.onServiceConnected(new ComponentName(context, BackgroundGeolocationService.class), serviceBinder);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertTrue("orphan stop should finish", stopResolved.get());
+        assertFalse("orphan stop should clear native delivery prefs", LocationStore.isEnabled(context));
+    }
+
+    @Test
+    public void resolveStopCallDoesNotClearReplacementWatchCall() throws Exception {
+        ContextBoundBackgroundGeolocation plugin = new ContextBoundBackgroundGeolocation(context);
+        PluginCall stopCall = stopCall(new AtomicBoolean());
+        PluginCall newWatchCall = new PluginCall(null, "BackgroundGeolocation", "watch-callback", "start", new JSObject()) {
+            @Override
+            public void setKeepAlive(boolean keepAlive) {}
+        };
+
+        Field watchCallField = BackgroundGeolocation.class.getDeclaredField("watchCall");
+        watchCallField.setAccessible(true);
+        watchCallField.set(plugin, newWatchCall);
+
+        java.lang.reflect.Method resolveStopCall = BackgroundGeolocation.class.getDeclaredMethod(
+            "resolveStopCall",
+            PluginCall.class,
+            PluginCall.class
+        );
+        resolveStopCall.setAccessible(true);
+        resolveStopCall.invoke(plugin, stopCall, null);
+
+        assertSameWatchCall(
+            "resolveStopCall must not clear a watchCall installed after orphan stop began",
+            newWatchCall,
+            watchCallField.get(plugin)
+        );
+    }
+
+    private static void assertSameWatchCall(String message, PluginCall expected, Object actual) {
+        assertNotNull(message, actual);
+        assertEquals(message, expected.getCallbackId(), ((PluginCall) actual).getCallbackId());
     }
 
     private static PluginCall stopCall(AtomicBoolean resolved) {
