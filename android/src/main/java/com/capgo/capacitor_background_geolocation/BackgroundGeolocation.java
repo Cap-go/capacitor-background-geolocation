@@ -367,10 +367,8 @@ public class BackgroundGeolocation extends Plugin {
                 if (savedCall != null) {
                     savedCall.setKeepAlive(false);
                 }
-                call.resolve();
-                return;
             }
-            call.resolve();
+            stopServiceFromEarlierInstance(call);
             return;
         }
         // Wait for an in-flight start() to reach the service before stopping it.
@@ -982,6 +980,48 @@ public class BackgroundGeolocation extends Plugin {
 
     private void stopBackgroundService() {
         getContext().stopService(createServiceIntent());
+    }
+
+    // In native delivery mode the service outlives the plugin instance that started it: it
+    // keeps running when the task is removed (app swiped away) or the activity is recreated,
+    // and START_STICKY lets the system restart it after its process dies. A new plugin
+    // instance has no connection to it, so stop() connects to it here and runs the service's
+    // own stop(). stopService() alone is not enough: after an in-place activity recreation
+    // (a configuration change) the earlier instance's binding is still registered and keeps
+    // the service alive.
+    private void stopServiceFromEarlierInstance(PluginCall call) {
+        Context context = getContext();
+        if (!LocationStore.isEnabled(context)) {
+            call.resolve();
+            return;
+        }
+        // Turn native delivery off first, so a sticky restart cannot resume tracking.
+        LocationStore.clear(context);
+        ServiceConnection connection = new ServiceConnection() {
+            @Override
+            public void onServiceConnected(ComponentName name, IBinder binder) {
+                ((BackgroundGeolocationService.LocalBinder) binder).stop();
+                try {
+                    context.unbindService(this);
+                } catch (IllegalArgumentException ignored) {
+                    // Already unbound.
+                }
+                call.resolve();
+            }
+
+            @Override
+            public void onServiceDisconnected(ComponentName name) {}
+        };
+        boolean bound;
+        try {
+            bound = context.bindService(createServiceIntent(), connection, Context.BIND_AUTO_CREATE);
+        } catch (SecurityException exception) {
+            bound = false;
+        }
+        if (!bound) {
+            stopBackgroundService();
+            call.resolve();
+        }
     }
 
     private void releaseServiceConnection() {
