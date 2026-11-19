@@ -78,7 +78,29 @@ public class BackgroundGeolocationStopTest {
         Intent stopped = shadowOf(context).getNextStoppedService();
         assertNotNull("stop() must still stop the service", stopped);
         assertEquals(BackgroundGeolocationService.class.getName(), stopped.getComponent().getClassName());
+        assertEquals("A refused bind must still be released", 1, shadowOf(context).getUnboundServiceConnections().size());
         assertEquals(1, call.resolved.get());
+    }
+
+    @Test
+    public void secondStopWaitsForTheTeardownInProgress() {
+        saveNativeDeliverySetup();
+        BackgroundGeolocationService service = Robolectric.buildService(BackgroundGeolocationService.class).create().get();
+        IBinder binder = service.onBind(new Intent(context, BackgroundGeolocationService.class));
+        shadowOf(context).setComponentNameAndServiceForBindService(serviceName, binder);
+        ContextPlugin plugin = new ContextPlugin(context);
+        CountingCall first = stopCall();
+        CountingCall second = stopCall();
+
+        plugin.stop(first);
+        plugin.stop(second);
+
+        assertEquals("The second stop() must not resolve before the service is stopped", 0, second.resolved.get());
+        shadowOf(Looper.getMainLooper()).idle();
+        assertTrue(shadowOf(service).isStoppedBySelf());
+        assertEquals(1, first.resolved.get());
+        assertEquals(1, second.resolved.get());
+        assertEquals("Only one connection for both calls", 1, shadowOf(context).getUnboundServiceConnections().size());
     }
 
     private void saveNativeDeliverySetup() {

@@ -62,6 +62,8 @@ public class BackgroundGeolocation extends Plugin {
     // wait for it instead of racing it on the raw service binding.
     private CompletableFuture<Void> serviceStartedFuture;
     private ServiceConnection serviceConnection;
+    // Set while stop() tears down a service started by an earlier plugin instance.
+    private volatile CompletableFuture<Void> earlierInstanceStop;
     private CompletableFuture<Void> locationPermissionFuture;
     private CompletableFuture<Void> geofencePermissionFuture;
     private final Set<PluginCall> canceledPermissionStarts = Collections.synchronizedSet(
@@ -990,23 +992,29 @@ public class BackgroundGeolocation extends Plugin {
     // (a configuration change) the earlier instance's binding is still registered and keeps
     // the service alive.
     private void stopServiceFromEarlierInstance(PluginCall call) {
+        // A stop() that arrives while an earlier one is still tearing the service down resolves
+        // with it: native delivery is already off, but the service may still be running.
+        CompletableFuture<Void> pending = earlierInstanceStop;
+        if (pending != null && !pending.isDone()) {
+            pending.thenRun(call::resolve);
+            return;
+        }
         Context context = getContext();
         if (!LocationStore.isEnabled(context)) {
             call.resolve();
             return;
         }
+        CompletableFuture<Void> stopped = new CompletableFuture<>();
+        earlierInstanceStop = stopped;
+        stopped.thenRun(call::resolve);
         // Turn native delivery off first, so a sticky restart cannot resume tracking.
         LocationStore.clear(context);
         ServiceConnection connection = new ServiceConnection() {
             @Override
             public void onServiceConnected(ComponentName name, IBinder binder) {
                 ((BackgroundGeolocationService.LocalBinder) binder).stop();
-                try {
-                    context.unbindService(this);
-                } catch (IllegalArgumentException ignored) {
-                    // Already unbound.
-                }
-                call.resolve();
+                unbindQuietly(context, this);
+                stopped.complete(null);
             }
 
             @Override
@@ -1019,8 +1027,18 @@ public class BackgroundGeolocation extends Plugin {
             bound = false;
         }
         if (!bound) {
+            // bindService() requires unbindService() whatever it returned.
+            unbindQuietly(context, connection);
             stopBackgroundService();
-            call.resolve();
+            stopped.complete(null);
+        }
+    }
+
+    private static void unbindQuietly(Context context, ServiceConnection connection) {
+        try {
+            context.unbindService(connection);
+        } catch (IllegalArgumentException ignored) {
+            // Not bound, or already unbound.
         }
     }
 
