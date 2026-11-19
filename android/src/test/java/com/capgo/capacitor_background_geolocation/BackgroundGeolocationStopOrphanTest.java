@@ -5,8 +5,8 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import android.Manifest;
-import android.content.Context;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.Intent;
 import android.content.ServiceConnection;
@@ -103,10 +103,7 @@ public class BackgroundGeolocationStopOrphanTest {
         plugin.stop(call);
         ServiceConnection connection = capturedConnection.get();
         assertNotNull("stop() should bind to the running service", connection);
-        connection.onServiceConnected(
-            new ComponentName(context, BackgroundGeolocationService.class),
-            serviceBinder
-        );
+        connection.onServiceConnected(new ComponentName(context, BackgroundGeolocationService.class), serviceBinder);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
 
         assertTrue("stop() should resolve after tearing down orphaned native delivery", resolved.get());
